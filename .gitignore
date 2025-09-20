@@ -1,0 +1,80 @@
+
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+Thumbs.db
+### Scala ###
+.bsp/
+
+### Data ###
+data/
+
+# Metals / Bloop / BSP
+.bloop/
+.metals/
+
+# SBT
+target/
+project/target/
+project/project/
+
+# Logs
+*.log
+
+# Python (if you mix some PySpark utils)
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.ipynb_checkpoints/
+
+
+# Spark temp
+spark-warehouse/
+derby.log
+
+# Env
+.env
+*.env
+
+# Backup / temp
+*.swp
+*.swo
+*~
