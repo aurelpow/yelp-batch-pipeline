@@ -30,6 +30,10 @@ object BronzeIngest {
       .appName("BronzeIngest")
       .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
       .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+      // --- Windows/local FS + Delta fixes ---
+      .config("spark.delta.logStore.class", "org.apache.spark.sql.delta.storage.LocalLogStore")
+      .config("spark.hadoop.fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem")
+      .config("spark.hadoop.fs.AbstractFileSystem.file.impl", "org.apache.hadoop.fs.local.LocalFs")
       .getOrCreate()
 
 
@@ -46,7 +50,6 @@ object BronzeIngest {
     val bronzeDir = conf.getString("paths.bronzeDir")
     val tablesCsv = spark.conf.get("app.tables", fileConf.getString("app.tables"))
     val writeMode = if (conf.hasPath("app.writeMode")) conf.getString("app.writeMode") else "append"
-    val slimUser  = if (conf.hasPath("user.slim")) conf.getBoolean("user.slim") else true
 
     // Small, general tunings (keep memory usage predictable on laptop)
     // Apply tunings from app.local.conf
