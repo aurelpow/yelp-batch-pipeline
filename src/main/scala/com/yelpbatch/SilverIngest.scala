@@ -18,20 +18,30 @@ import io.delta.tables.DeltaTable
 object SilverIngest {
 
   def main(args: Array[String]): Unit = {
-
     // Initialize Spark session with application name for cluster monitoring
     val spark = SparkSession.builder
       .appName("SilverIngest")
       .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
       .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
       .getOrCreate()
-    
+
     // For Spark 3.0+, set legacy time parser policy to LEGACY for backward compatibility
     spark.sql("set spark.sql.legacy.timeParserPolicy=LEGACY")
 
     // Set Spark log level to "ERROR" to suppress INFO and WARN output
     spark.sparkContext.setLogLevel("ERROR")
 
+    val runDate = if (args.nonEmpty) args.head else ""
+    run(spark, runDate)
+
+    // Close the Spark session
+    spark.stop()
+  }
+
+  /**
+   * New run method for programmatic invocation
+   */
+  def run(spark: SparkSession, runDate: String): Unit = {
     // Load defaults from classpath resource (app.local.conf)
     val fileConf: Config = ConfigFactory.parseResources("app.local.conf").resolve()
 
@@ -54,24 +64,18 @@ object SilverIngest {
 
     // Determine tables to process: from command line arg or config
     val inputTables: Seq[String] =
-      if (args.nonEmpty) args.head.split(",").map(_.trim).filter(_.nonEmpty).toSeq
-      else tablesCsv.split(",").map(_.trim).filter(_.nonEmpty).toSeq
+      tablesCsv.split(",").map(_.trim).filter(_.nonEmpty).toSeq
 
     val hfs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
 
-    try {
-      println(s"[SilverIngest] Starting processing for tables: ${inputTables.mkString(", ")}")
-      
-      // Process each table in one Spark session
-      inputTables.foreach { tableName =>
-        processTable(spark, hfs, bronzeDir, silverDir, tableName, maxRecsPerFile, writeMode)
-      }
-      
-      println("[SilverIngest] All tables processed successfully.")
-    } finally {
-      // Close the Spark session
-      spark.stop()
+    println(s"[SilverIngest] Starting processing for tables: ${inputTables.mkString(", ")}")
+
+    // Process each table in one Spark session
+    inputTables.foreach { tableName =>
+      processTable(spark, hfs, bronzeDir, silverDir, tableName, maxRecsPerFile, writeMode)
     }
+
+    println("[SilverIngest] All tables processed successfully.")
   }
 
   /**
@@ -315,7 +319,7 @@ object SilverIngest {
 
     try {
       if (hfs.exists(new Path(outputPath))) {
-        // Table exists - use merge logic for upserts
+        // Table exists - use merge logic for upsets
         val deltaTable = DeltaTable.forPath(outputPath)
         
         // Get the primary key column for each table

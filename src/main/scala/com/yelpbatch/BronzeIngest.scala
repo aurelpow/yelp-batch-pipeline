@@ -17,14 +17,12 @@ import org.apache.hadoop.fs.{FileSystem, Path}
  *   - Processes all tables listed in configuration, or a specific table via command line argument.
  */
 object BronzeIngest {
-
   /**
    * Main entry point for the BronzeIngest application.
    *
    * @param args Command line arguments. If provided, the first argument can be a single table name to process.
    */
   def main(args: Array[String]): Unit = {
-
     // Initialize Spark session with application name for cluster monitoring
     val spark = SparkSession.builder
       .appName("BronzeIngest")
@@ -36,7 +34,17 @@ object BronzeIngest {
       .config("spark.hadoop.fs.AbstractFileSystem.file.impl", "org.apache.hadoop.fs.local.LocalFs")
       .getOrCreate()
 
+    val runDate = if (args.nonEmpty) args.head else ""
+    run(spark, runDate)
 
+    // Close the Spark session
+    spark.stop()
+  }
+
+  /**
+   * New run method for programmatic invocation
+   */
+  def run(spark: SparkSession, runDate: String): Unit = {
     // Set Spark log level to "ERROR" to suppress INFO and WARN output
     spark.sparkContext.setLogLevel("ERROR")
 
@@ -65,8 +73,7 @@ object BronzeIngest {
 
     //  Determine tables to process: from command line arg or config
     val inputTables: Seq[String] =
-      if (args.nonEmpty) args.head.split(",").map(_.trim).filter(_.nonEmpty).toSeq
-      else tablesCsv.split(",").map(_.trim).filter(_.nonEmpty).toSeq
+      tablesCsv.split(",").map(_.trim).filter(_.nonEmpty).toSeq
 
     // Import Spark SQL functions(all)
     import org.apache.spark.sql.functions._
@@ -110,8 +117,7 @@ object BronzeIngest {
       }
       println("[BronzeIngest] All done.")
     } finally {
-      // Close the Spark session
-      spark.stop()
+      // Close handled by caller
     }
   }
 }
