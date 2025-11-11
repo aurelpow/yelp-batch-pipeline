@@ -1,4 +1,4 @@
-package com.yelpbatch.gold.FactReviewTip
+package com.yelpbatch.gold.factreviewtip
 
 /** Centralized names to avoid hardcoding strings everywhere */
 object ColNames {
@@ -8,12 +8,12 @@ object ColNames {
   val granularity = "granularity" // 0 daily, 2 monthly
   val periodMonth = "period_month" // YYYY-MM
   val date = "date" // original date column from source
-  val measure = "Measure" // measure ids column
-  val units = "Units" // measure values column
+  val measure = "measure" // measure ids column
+  val units = "units" // measure values column
   val DtAudModification = "dt_aud_modification"
 }
 
-//** Measure codes  */
+/** Measure codes  */
 object MeasureFactReviewTip {
   // Measure mapping to columns (wide format)
   val reviewCount: Int =  1
