@@ -78,3 +78,19 @@ derby.log
 *.swp
 *.swo
 *~
+
+# Airflow (keep DAGs, ignore runtime)
+.airflow/
+airflow/logs/
+airflow/plugins/
+airflow/jars/*.jar
+airflow/.env
+airflow/airflow.db
+airflow/airflow-webserver.pid
+airflow/unittests.cfg
+
+
+# Containers
+.docker/
+docker/*.pid
+docker/*.log
