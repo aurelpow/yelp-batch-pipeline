@@ -26,7 +26,7 @@ object SilverTransforms {
       .withColumn(RawColumns.latitude, when(col(RawColumns.latitude) < -90 || col(RawColumns.latitude) > 90, null)
         .otherwise(col(RawColumns.latitude)).cast("double"))
       .withColumn(RawColumns.longitude, when(col(RawColumns.longitude) < -180 || col(RawColumns.longitude) > 180, null)
-        .otherwise(col(RawColumns.latitude)).cast("double"))
+        .otherwise(col(RawColumns.longitude)).cast("double"))
       .withColumn(RawColumns.isOpen, col(RawColumns.isOpen).cast("boolean"))
       // Select final columns for business fact table
       .select(
