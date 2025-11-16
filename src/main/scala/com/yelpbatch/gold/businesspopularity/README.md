@@ -5,7 +5,7 @@ Compute a monthly business popularity score and write results to the Gold layer.
 - `read` — load Silver inputs for the target month
 - `transform` — aggregate metrics, normalize, compute recency and score
 - `persist` — idempotent write/upsert to Gold
-- `run` — orchestrator that executes only for End\-Of\-Month dates
+- `run` — orchestrator that executes only for End-Of-Month dates
 
 ## Files
 - `BusinessPopularityAgg.scala` — main aggregator with `readData`, `transform`, `persist`, `run`
@@ -20,7 +20,7 @@ Compute a monthly business popularity score and write results to the Gold layer.
 
 - `transform(dataFrames, dateEnd, periodMonth)`
     - Aggregate metrics per `business_id` (review count, avg stars, checkin count, compliment sum)
-    - Apply min\-\-max normalization (uses `minMaxNormalize`)
+    - Apply min-max normalization (uses `minMaxNormalize`)
     - Compute recency boost and final `popularity_score`
     - Compute `city` rank and add `period_month` column
 

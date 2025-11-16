@@ -76,7 +76,7 @@ object FactReviewTipBusinessAgg {
         df = dailyMetrics,
         outputPath = goldPath
       )
-      logger.info(s"[BusinessPopularityAgg] Execution completed successfully for " +
+      logger.info(s" Execution completed successfully for " +
         s"runDate=$runDate, granularity=${Granularity.Daily}")
     }
 
@@ -107,7 +107,7 @@ object FactReviewTipBusinessAgg {
         df = monthlyMetrics,
         outputPath = goldPath
       )
-      logger.info(s"[BusinessPopularityAgg] Execution completed successfully for " +
+      logger.info(s" Execution completed successfully for " +
         s"runDate=$runDate, granularity=${Granularity.Monthly}")
     }
   }
@@ -170,9 +170,9 @@ object FactReviewTipBusinessAgg {
 
   /** PERSIST: Write output in wide format (one row per business_id + measure)
    *
-   * @param spark
-   * @param df
-   * @param outputPath
+   * @param spark      SparkSession used for writing data
+   * @param df         DataFrame to be persisted
+   * @param outputPath Destination path for the output data
    */
   private def persist(
                        spark: SparkSession,
@@ -187,7 +187,10 @@ object FactReviewTipBusinessAgg {
         current_timestamp()
       )
     // Define key columns for upsert (business_id + period_month)
-    val keyCols: Seq[String] = Seq(RawColumns.businessId, transformColumns.day, transformColumns.granularity)
+    val keyCols: Seq[String] = Seq(RawColumns.businessId,
+      transformColumns.day,
+      transformColumns.granularity,
+      ColNames.measure)
     val partitionCols: Seq[String] = Seq(transformColumns.day, transformColumns.granularity)
 
     // Upsert into Delta table

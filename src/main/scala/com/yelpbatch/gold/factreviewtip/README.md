@@ -13,7 +13,6 @@ Location: `src/main/scala/com/yelpbatch/gold/factreviewtip/README.md`
 - `FactReviewTipBusinessConstants.scala` — measure IDs and column name constants.
 - `README.md` — this document.
 
-
 ### Function Structure (read → transform → persist → run)
 
 - **`run(spark, config, runDateStr, forceMonthOpt, skipDaily, dryRun)`** — Public orchestrator
@@ -97,7 +96,8 @@ From `Runner.scala`:
 +----------+------------+-----------+--------------------+-------+-----+--------------------+
 ```
 
-**Interpretation**: For business `JzQsy7...` on `2020-01-31` (daily, granularity=0):
-- Output (Gold)
-    - Delta table `gold/fact_review_tip` (or repo naming) partitioned by `period_month`
-    - Columns include: `business_id`, `period_month`, `review_count`, `avg_review_stars`, `tip_count`, `last_review_date`, plus ingestion metadata
+**Interpretation**: 
+- For business `JzQsy7...` on `2020-01-31` (daily, granularity=0), 
+each row represents a specific metric (e.g., review count, average stars, tip count) for that business and day.
+- The `measure_id` column identifies the metric, and the `value` column gives its value. 
+- This long format allows flexible aggregation and analysis across businesses and time periods.

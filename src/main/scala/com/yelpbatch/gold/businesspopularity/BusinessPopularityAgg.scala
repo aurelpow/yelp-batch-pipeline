@@ -1,7 +1,6 @@
 package com.yelpbatch.gold.businesspopularity
 
 import com.typesafe.config.Config
-import com.yelpbatch.gold.businesspopularity.BusinessPopularityAgg.{persist, readData, transform}
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.{Window, WindowSpec}

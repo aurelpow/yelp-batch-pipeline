@@ -98,7 +98,7 @@ Load the JSON files into MongoDB collections:
 │   └── plugins.sbt
 ├── src
 │   ├── main
-│   │   ├── ressources
+│   │   ├── resources
 │   │   │   ├── log4j.properties
 │   │   │   ├── application.conf
 │   │   │   ├── dev.conf

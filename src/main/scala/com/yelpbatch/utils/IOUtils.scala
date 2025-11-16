@@ -206,9 +206,9 @@ object IOUtils {
    *
    * @param spark      : SparkSession
    * @param path       : Delta table path
-   * @param columns    :
+   * @param columns    : columns to select (if empty, select all)
    * @param conditions : optional filter conditions (SQL expressions)
-   * @return
+   * @return DataFrame with selected columns and applied filters
    */
   def readDelta(
                  spark: SparkSession,
