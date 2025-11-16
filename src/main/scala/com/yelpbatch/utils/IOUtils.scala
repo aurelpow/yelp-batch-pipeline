@@ -2,7 +2,7 @@ package com.yelpbatch.utils
 
 import java.util.Properties
 import io.delta.tables.DeltaTable
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, SparkSession, Column}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 import scala.util.Try
@@ -11,7 +11,14 @@ object IOUtils {
   // Logger
   private val logger = org.slf4j.LoggerFactory.getLogger(getClass)
 
-  /** Write DataFrame as Delta with optional partitioning and writer options */
+  /** Write DataFrame as Delta with optional partitioning and writer options
+   *
+   * @param df          : DataFrame to write
+   * @param outputPath  : target Delta path
+   * @param mode        : write mode (default "append")
+   * @param partitionBy : optional partition columns
+   * @param options     : additional writer options as key-value map
+   * */
   def writeDelta(
                   df: DataFrame,
                   outputPath: String,
@@ -27,11 +34,12 @@ object IOUtils {
 
   /**
    * Idempotent upsert (merge) into Delta by key columns. Creates target if missing.
-   * @param spark: SparkSession
-   * @param df: incoming DataFrame to upsert
-   * @param outputPath: target Delta path
-   * @param keyCols: columns to use as keys for matching
-   * @param partitionColumns: optional partition columns for new Delta table
+   *
+   * @param spark            : SparkSession
+   * @param df               : incoming DataFrame to upsert
+   * @param outputPath       : target Delta path
+   * @param keyCols          : columns to use as keys for matching
+   * @param partitionColumns : optional partition columns for new Delta table
    * */
   def upsertDeltaByKey(
                         spark: SparkSession,
@@ -59,6 +67,10 @@ object IOUtils {
       )
     }
 
+    // decide whether to include overwriteSchema based on session partition overwrite mode
+    val partitionOverwriteMode = spark.conf.getOption("spark.sql.sources.partitionOverwriteMode").getOrElse("static")
+    val includeOverwriteSchema = partitionOverwriteMode.toLowerCase != "dynamic"
+
     if (hfs.exists(fsPath)) {
       // try to perform merge upsert into existing delta table
       try {
@@ -76,9 +88,12 @@ object IOUtils {
         case ex: Exception =>
           // if it's not a Delta table or merge failed, fall back to overwriting (safe recovery)
           logger.warn(s"Could not open Delta at $outputPath for merge: ${ex.getMessage}. Falling back to overwrite create.")
-          var writer = df.write.format("delta").mode("overwrite").option("overwriteSchema", "true")
+
+          var writer = df.write.format("delta").mode("overwrite")
+          if (includeOverwriteSchema) writer = writer.option("overwriteSchema", "true")
           if (actualPartitionCols.nonEmpty) writer = writer.partitionBy(actualPartitionCols: _*)
           writer.save(outputPath)
+
           logger.info(s"Wrote DataFrame to $outputPath with mode=overwrite (fallback)")
       }
     } else {
@@ -87,9 +102,12 @@ object IOUtils {
       logger.info(s"Target path $outputPath does not exist. Creating initial Delta table.")
       // ensure parent directory exists
       Option(fsPath.getParent).foreach(p => if (!hfs.exists(p)) hfs.mkdirs(p))
-      var writer = df.write.format("delta").mode("overwrite").option("overwriteSchema", "true")
+
+      var writer = df.write.format("delta").mode("overwrite")
+      if (includeOverwriteSchema) writer = writer.option("overwriteSchema", "true")
       if (actualPartitionCols.nonEmpty) writer = writer.partitionBy(actualPartitionCols: _*)
       writer.save(outputPath)
+
       logger.info(s"Created new Delta at $outputPath partitionedBy=${actualPartitionCols.mkString(",")}")
     }
   }
@@ -115,12 +133,13 @@ object IOUtils {
 
   /**
    * Read from MongoDB with error handling
-   * @param spark: SparkSession
-   * @param mongoUri: MongoDB connection URI
-   * @param database: database name
-   * @param collection: collection name
-   * @param schema: optional StructType schema
-   * @param readOptions: additional read options as key-value map
+   *
+   * @param spark       : SparkSession
+   * @param mongoUri    : MongoDB connection URI
+   * @param database    : database name
+   * @param collection  : collection name
+   * @param schema      : optional StructType schema
+   * @param readOptions : additional read options as key-value map
    * @return Try[DataFrame] - use .get, .getOrElse(), or pattern matching
    */
   def readFromMongoDG(
@@ -154,16 +173,17 @@ object IOUtils {
 
   /**
    * Read JSON from filesystem with optional schema
-   * @param spark: SparkSession
-   * @param path: file path or directory
-   * @param schema: optional StructType schema
+   *
+   * @param spark  : SparkSession
+   * @param path   : file path or directory
+   * @param schema : optional StructType schema
    * @return Try[DataFrame] - use .get, .getOrElse(), or pattern matching
    */
   def readJsonFromFileSystem(
-                        spark : SparkSession,
-                        path : String,
-                        schema: Option[org.apache.spark.sql.types.StructType] = None
-                        ): Try[DataFrame] = {
+                              spark: SparkSession,
+                              path: String,
+                              schema: Option[org.apache.spark.sql.types.StructType] = None
+                            ): Try[DataFrame] = {
 
     Try {
       // Validate inputs
@@ -179,5 +199,30 @@ object IOUtils {
         case None => reader.json(path)
       }
     }
+  }
+
+  /**
+   * Read Delta table with optional column selection and filtering
+   *
+   * @param spark      : SparkSession
+   * @param path       : Delta table path
+   * @param columns    : columns to select (if empty, select all)
+   * @param conditions : optional filter conditions (SQL expressions)
+   * @return DataFrame with selected columns and applied filters
+   */
+  def readDelta(
+                 spark: SparkSession,
+                 path: String,
+                 columns: Seq[String],
+                 conditions: Seq[Column] = Seq.empty
+               ): DataFrame = {
+    val reader = spark.read.format("delta")
+    val df: DataFrame = reader.load(path)
+
+    // apply filters if any
+    val filtered: DataFrame = if (conditions.nonEmpty) df.filter(conditions.reduce(_ && _)) else df
+
+    // select requested columns (if none provided, return all)
+    if (columns.nonEmpty) filtered.select(columns.map(col): _*) else filtered
   }
 }

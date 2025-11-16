@@ -42,6 +42,7 @@ object SilverIngest {
           runDate: String,
           fullLoad: Boolean,
           tablesOpt: Option[String] = None): Unit = {
+    // Validate required parameters
     require(runDate.nonEmpty, "runDate is required: yyyy-MM-dd")
 
     val bronzeDir = config.getString("paths.bronzeDir")

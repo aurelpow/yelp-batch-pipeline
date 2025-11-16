@@ -57,6 +57,17 @@ def yelp_batch_pipeline():
                           "--dry_run", "{{ dag_run.conf.get('dry_run', 'false') }}"],
     )
 
-    bronze >> silver >> gold >> gold_fact_review_tip
+    gold_business_popularity = SparkSubmitOperator(
+        task_id="gold_business_popularity",
+        application=JAR_PATH,
+        java_class=CLASS,
+        application_args=["--process","gold_business_popularity",
+                            "--env",ENV,
+                            "--start_date", "{{ dag_run.conf.get('start_date', dag_run.conf.get('run_date', ds)) }}",
+                            "--end_date",   "{{ dag_run.conf.get('end_date',   dag_run.conf.get('run_date', ds)) }}"
+                          ],
+    )
+
+    bronze >> silver >> gold >> [gold_fact_review_tip, gold_business_popularity]
 
 yelp_batch_pipeline()

@@ -6,6 +6,7 @@ object Granularity {
   val Monthly:  Int = 2
 }
 
+/** Centralized raw column names to avoid hardcoding strings everywhere */
 object RawColumns {
   val userId: String = "user_id"
   val businessId: String = "business_id"
@@ -46,4 +47,7 @@ object transformColumns {
   val checkinDate: String = "checkin_date"
   val friendCount: String = "friend_count"
   val day: String = "day"
+  val goldIngestTs: String = "_gold_ingest_ts"
+  val granularity: String = "granularity"
+  val periodMonth: String = "period_month"
 }
