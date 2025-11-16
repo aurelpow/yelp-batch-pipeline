@@ -94,3 +94,6 @@ airflow/unittests.cfg
 .docker/
 docker/*.pid
 docker/*.log
+
+# Others
+output.txt

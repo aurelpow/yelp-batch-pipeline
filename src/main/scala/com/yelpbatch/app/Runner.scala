@@ -2,6 +2,7 @@ package com.yelpbatch.app
 
 import com.yelpbatch.bronze.BronzeIngest
 import com.yelpbatch.gold.factreviewtip.FactReviewTipBusinessAgg
+import com.yelpbatch.gold.businesspopularity.BusinessPopularityAgg
 import com.yelpbatch.silver.SilverIngest
 import com.yelpbatch.utils.DateUtils
 import org.apache.spark.sql.SparkSession
@@ -69,6 +70,9 @@ object Runner {
       .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
       .getOrCreate()
 
+    // Disable INFO logs for cleaner output
+    spark.sparkContext.setLogLevel("WARN")
+
 
     process match {
       case p if  p == "bronze_ingest" && skipBronze  =>
@@ -86,6 +90,14 @@ object Runner {
           forceMonth,
           skipDaily,
           dryRun
+          )
+        )
+      case "gold_business_popularity" =>
+        runDates.foreach(d =>
+          BusinessPopularityAgg.run(
+            spark,
+            appConfig,
+            d
           )
         )
       case other => sys.error(s"Unknown process: $other")
