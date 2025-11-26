@@ -25,5 +25,13 @@ USER airflow
 # Install Apache Spark provider
 RUN pip install --no-cache-dir apache-airflow-providers-apache-spark==4.10.0
 
+# Copy JARs
+#COPY --chown=airflow:root lib/postgresql-42.7.8.jar /opt/airflow/jars/
+#COPY --chown=airflow:root target/scala-2.12/yelp-batch-project-assembly-0.1.0-SNAPSHOT.jar /opt/airflow/jars/
+
+
+# Copy configuration files
+#COPY --chown=airflow:root src/main/resources/*.conf /opt/airflow/config/
+
 # Provide Spark defaults so spark-submit automatically loads Delta & MongoDB connector
 COPY spark-defaults.conf /opt/spark/conf/spark-defaults.conf

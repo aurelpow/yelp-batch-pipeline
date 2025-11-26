@@ -1,0 +1,35 @@
+# Logs (exclude ALL log directories)
+**/logs/
+**/*.log
+airflow/logs/**
+logs/**
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+
+# SBT / Scala (exclude build artifacts except the fat JAR)
+target/scala-2.12/classes/
+target/scala-2.12/test-classes/
+target/scala-2.12/update/
+target/streams/
+project/target/
+project/project/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore

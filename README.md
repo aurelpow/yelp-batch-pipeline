@@ -242,6 +242,46 @@ docker-compose logs -f airflow-scheduler
 - URL: `http://localhost:8080`
 - Default credentials: `airflow` / `airflow`
 
+##### Configure Spark Connection
+
+You need to manually create the Spark connection in Airflow UI for the DAG to work properly.
+
+**Step-by-step instructions:**
+
+1. **Access Airflow UI**: Navigate to `http://localhost:8080`
+2. **Login** with credentials: `airflow` / `airflow`
+3. **Go to Connections**: Click **Admin** → **Connections** in the top menu
+4. **Add Connection**: Click the **+** button to create a new connection
+5. **Fill in the form**:
+   - **Connection Id**: `spark_default`
+   - **Connection Type**: Select `Spark` from the dropdown
+   - **Host**: `local[*]`
+   - **Port**: Leave empty
+   - **Extra**: Click on "Edit as JSON" and paste:
+     ```json
+     {
+     "queue": null,
+     "deploy-mode": "client",
+     "spark-binary": "spark-submit",
+     "namespace": null
+     }
+     ```
+6. **Save**: Click the **Save** button
+
+**Important notes for Airflow 3.x:**
+- ⚠️ Do NOT use `spark-home` in the Extra field (deprecated in Airflow 3.x)
+- ✅ The `spark-submit` binary is already available at `/opt/spark/bin/spark-submit` in the Docker container
+- ✅ Use `local[*]` as Host (not just `local`) to utilize all available CPU cores
+
+**Verify the connection:**
+- After saving, the connection should appear in the connections list
+- The URI format should be: `spark://local[*]?deploy-mode=client&spark-binary=spark-submit`
+
+**Troubleshooting:**
+- If you see "Could not load connection string spark_default, defaulting to yarn" in logs, the connection wasn't created properly
+- Make sure the Connection Id is exactly `spark_default` (lowercase, with underscore)
+- Ensure Connection Type is set to `Spark` (not `HTTP` or other types)
+
 ##### Copy JAR to Airflow
 ```bash
 # Copy assembled JAR to Airflow jars directory
@@ -251,7 +291,7 @@ copy target\scala-2.12\yelp-batch-project-assembly-0.1.0-SNAPSHOT.jar airflow\ja
 ##### Trigger DAG from UI
 1. Navigate to `http://localhost:8080`
 2. Find the `yelp_batch_pipeline` DAG
-3. Click "Trigger DAG" and configure with JSON:
+3. Click "Trigger DAG" and configure with JSON like this one:
 ```json
 {
   "start_date": "2020-01-25",
@@ -287,6 +327,84 @@ After successful runs, data will be available at:
 - **Gold**: 
   - `data/gold/business_popularity/day=YYYY-MM-DD/granularity=2/`
   - `data/gold/fact_review_tip_metrics/day=YYYY-MM-DD/granularity=0|2/`
+
+### PostgreSQL Integration
+
+The Gold layer can optionally persist data to PostgreSQL for SQL-based analytics and BI tool integration.
+
+#### Quick Start
+
+1. **Initialize the database schema** (automatic on first run):
+```powershell
+# Start fresh with schema initialization
+docker compose down --volumes
+docker compose up -d
+```
+
+The schema automatically creates:
+- `gold` schema with 2 fact tables + 1 reference table
+- 3 analytical views + 2 data quality views
+- 10 strategic indexes for performance
+
+2. **Enable PostgreSQL writes** in your configuration:
+```hocon
+# src/main/resources/dev.conf or local.conf
+postgresql {
+  enabled = true
+  host = "host.docker.internal"  # or "postgres" from Airflow
+  port = 5432
+  database = "airflow"
+}
+```
+
+3. **Run Gold processes with PostgreSQL credentials**:
+```powershell
+# Local execution
+bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
+
+# Via Airflow (credentials injected automatically)
+# Just trigger the DAG normally
+```
+
+#### Verify Data
+
+```powershell
+# Connect to PostgreSQL
+docker exec -it yelp-batch-project-postgres-1 psql -U airflow -d airflow
+
+# Check data
+SELECT COUNT(*) FROM gold.business_popularity;
+SELECT * FROM gold.v_top_businesses_by_city LIMIT 10;
+```
+
+#### Handling Re-runs (Upsert Strategy)
+
+The pipeline implements a **delete-before-insert** strategy to handle duplicate keys when re-running the same date:
+
+- **Business Popularity**: Deletes all records for the same `day` and `period_month` before inserting
+- **Fact Metrics**: Deletes all records for the same `day`, `period_month`, and `granularity` before inserting
+
+This makes the pipeline **idempotent** - you can safely re-run the same date multiple times without errors:
+
+```powershell
+# First run - inserts data
+bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
+
+# Second run (same date) - deletes old data, inserts fresh data (no duplicate key error!)
+bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
+```
+
+**Logs will show**:
+```
+[PostgreSQLWriter] Upserting 119698 rows to PostgreSQL table: gold.business_popularity
+[PostgreSQLWriter] Delete keys: day, period_month
+[PostgreSQLWriter] Deleting existing records from gold.business_popularity
+[PostgreSQLWriter] Deleted 119698 existing rows
+[PostgreSQLWriter] Inserting 119698 new rows
+[PostgreSQLWriter] Successfully upserted 119698 rows
+```
+
+📖 **For complete setup guide, queries, and troubleshooting, see [sql/README.md](./sql/README.md)**
 
 ### Troubleshooting
 

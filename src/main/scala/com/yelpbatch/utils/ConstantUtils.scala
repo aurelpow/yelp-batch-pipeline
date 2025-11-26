@@ -42,7 +42,7 @@ object tableNames {
 
 object transformColumns {
   val ingestTs: String = "_ingest_ts"
-  val ingestDate: String = "ingest_date"
+  val ingestDate: String = "_ingest_date"
   val silverIngestTs: String = "_silver_ingest_ts"
   val checkinDate: String = "checkin_date"
   val friendCount: String = "friend_count"

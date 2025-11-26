@@ -104,15 +104,19 @@ services:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
+    ports:
+      - "5433:5432"
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
+      - ${AIRFLOW_PROJ_DIR:-.}/sql/init-schema.sql:/docker-entrypoint-initdb.d/init-schema.sql
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s
       retries: 5
       start_period: 5s
     restart: always
-    networks: [airnet]
+    networks:
+      - airnet
 
   airflow-apiserver:
     <<: *airflow-common
@@ -234,6 +238,7 @@ services:
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
       _PIP_ADDITIONAL_REQUIREMENTS: ''
+      GOLD_DATABASE_URL: "postgresql+psycopg2://gold:gold@host.docker.internal:5432/yelp_analytics?options=-csearch_path%3Dgold"
     user: "0:0"
 
   airflow-cli:
