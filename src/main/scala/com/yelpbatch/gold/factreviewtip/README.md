@@ -101,3 +101,37 @@ From `Runner.scala`:
 each row represents a specific metric (e.g., review count, average stars, tip count) for that business and day.
 - The `measure_id` column identifies the metric, and the `value` column gives its value. 
 - This long format allows flexible aggregation and analysis across businesses and time periods.
+
+---
+
+## PostgreSQL Integration
+
+### Upsert Strategy (Handling Re-runs)
+
+When writing to PostgreSQL, the process uses a **delete-before-insert** strategy to handle duplicate keys:
+
+**Delete Keys**: `day`, `period_month`, `granularity`
+
+**How it works**:
+1. **Identifies** all unique combinations of `(day, period_month, granularity)` in the DataFrame
+2. **Deletes** all existing PostgreSQL records matching those keys
+3. **Inserts** the new data
+
+**Example**: Running for `2020-01-31` with both daily (`granularity=0`) and monthly (`granularity=2`) metrics:
+- Deletes all rows where `day='2020-01-31'` AND `period_month='2020-01'` AND `granularity IN (0, 2)`
+- Inserts fresh metrics for all businesses
+
+**Benefits**:
+- ✅ **Idempotent**: Safe to re-run the same date multiple times
+- ✅ **No duplicates**: Old data removed before new data inserted
+- ✅ **Granular**: Only deletes the specific day/period/granularity being processed
+
+**Logs**:
+```
+[PostgreSQLWriter] Upserting 150000 rows to PostgreSQL table: gold.fact_review_tip_metrics_wide
+[PostgreSQLWriter] Delete keys: day, period_month, granularity
+[PostgreSQLWriter] Deleting existing records from gold.fact_review_tip_metrics_wide
+[PostgreSQLWriter] Deleted 150000 existing rows
+[PostgreSQLWriter] Inserting 150000 new rows
+[PostgreSQLWriter] Successfully upserted 150000 rows
+```

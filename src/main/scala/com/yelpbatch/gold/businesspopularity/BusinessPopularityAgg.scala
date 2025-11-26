@@ -4,7 +4,7 @@ import com.typesafe.config.Config
 import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
-import com.yelpbatch.utils.{DateUtils, IOUtils, RawColumns, tableNames, transformColumns,Granularity}
+import com.yelpbatch.utils.{DateUtils, Granularity, IOUtils, PostgreSQLWriter, RawColumns, tableNames, transformColumns}
 
 object BusinessPopularityAgg {
 
@@ -22,7 +22,9 @@ object BusinessPopularityAgg {
   def run(
            spark: SparkSession,
            config: Config,
-           runDate: String
+           runDate: String,
+           postGresqlUser: String,
+           postGresqlPassword: String
          ): Unit = {
 
     // Validate required parameters
@@ -74,7 +76,13 @@ object BusinessPopularityAgg {
     persist(
       spark = spark,
       df = popularityDF,
-      goldPath = goldDir
+      goldPath = goldDir,
+      hostPostGres = config.getString("postgresql.host"),
+      portPostGres = config.getInt("postgresql.port"),
+      databasePostGres = config.getString("postgresql.database"),
+      postGresEnabled = config.getBoolean("postgresql.enabled"),
+      userPostGres = postGresqlUser,
+      passwordPostGres = postGresqlPassword
     )
     logger.info(s"[BusinessPopularityAgg] Execution completed successfully for $periodMonth")
   }
@@ -226,7 +234,13 @@ object BusinessPopularityAgg {
   private def persist(
                        spark: SparkSession,
                        df: DataFrame,
-                       goldPath: String
+                       goldPath: String,
+                       hostPostGres: String = "",
+                       portPostGres: Int = 5432,
+                       databasePostGres: String = "",
+                       postGresEnabled: Boolean = false,
+                       userPostGres: String = "",
+                       passwordPostGres:String = "",
                      ): Unit = {
 
     logger.info(s"[BusinessPopularityAgg] Writing business popularity data to Gold layer")
@@ -243,15 +257,38 @@ object BusinessPopularityAgg {
     val keyCols: Seq[String] = Seq(RawColumns.businessId, transformColumns.day, transformColumns.granularity)
     val partitionCols: Seq[String] = Seq(transformColumns.day, transformColumns.granularity)
 
-    // Upsert into Delta table
-    IOUtils.upsertDeltaByKey(
-      spark = spark,
-      df = dfWithTs,
-      outputPath = outputPath,
-      keyCols = keyCols,
-      partitionColumns = partitionCols
-    )
+    // Write to postgres if enabled, otherwise write to Delta
+    if (postGresEnabled) {
+      logger.info(s"[BusinessPopularityAgg] Upserting business popularity data to PostgreSQL database at $hostPostGres:$portPostGres/$databasePostGres")
+      val jdbcUrl = PostgreSQLWriter.getJDBCUrl(
+        host = hostPostGres,
+        port = portPostGres,
+        database = databasePostGres)
 
-    logger.info(s"[BusinessPopularityAgg] Successfully wrote ${df.count()} records to $outputPath")
+      // Use upsert to handle duplicates (delete existing records for the same day/period_month, then insert)
+      PostgreSQLWriter.upsertToPostgreSQL(
+        spark = spark,
+        df = dfWithTs,
+        jdbcUrl = jdbcUrl,
+        tableName = "gold.business_popularity",
+        user = userPostGres,
+        password = passwordPostGres,
+        deleteKeys = Seq("day", "period_month"),  // Delete existing records for this day and period
+        enabled = postGresEnabled
+      )
+
+      logger.info("Successfully upserted to PostgreSQL table gold.business_popularity")
+    }
+    else {
+      // Upsert into Delta table
+      IOUtils.upsertDeltaByKey(
+        spark = spark,
+        df = dfWithTs,
+        outputPath = outputPath,
+        keyCols = keyCols,
+        partitionColumns = partitionCols
+      )
+      logger.info(s"Successfully wrote to $outputPath")
+    }
   }
 }

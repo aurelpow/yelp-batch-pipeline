@@ -9,6 +9,16 @@ import org.apache.spark.sql.SparkSession
 
 object Runner {
   def main(args: Array[String]): Unit = {
+    // Force PostgreSQL driver registration BEFORE SparkSession creation
+    try {
+      Class.forName("org.postgresql.Driver")
+      println("✓ PostgreSQL JDBC driver loaded successfully")
+    } catch {
+      case e: ClassNotFoundException =>
+        System.err.println("✗ PostgreSQL driver not found in classpath")
+        throw e
+    }
+    // Parse command-line arguments into a map
     val m = args.sliding(2,2).collect{case Array(k,v)=>k.stripPrefix("--")->v}.toMap
     val process: String = m.getOrElse("process", sys.error("Missing --process"))
     val env: String = m.getOrElse("env",sys.error("Missing --env"))
@@ -17,6 +27,8 @@ object Runner {
     val endOpt: Option[String] = m.get("end_date")            // YYYY-MM-DD
     val tablesOpt:Option[String]  = m.get("tables") // comma-separated table names
     val forceMonth: Option[String] = m.get("force_monthly")       // YYYY-MM
+    val postGresqlUser: Option[String] = m.get("pg_user")       // PostgreSQL user
+    val postGresqlPassword: Option[String] = m.get("pg_password") // PostgreSQL password
 
     // Helper function to parse boolean flags
     def getBooleanFlag(key: String): Boolean = {
@@ -60,7 +72,7 @@ object Runner {
     // Normalize tables argument
     val tablesCsvOpt: Option[String] = tablesOpt.flatMap(parseTables)
 
-    val spark = SparkSession.builder()
+    val sparkBuilder = SparkSession.builder()
       .appName(s"YelpBatch-$process")
       .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
       .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
@@ -68,11 +80,18 @@ object Runner {
       .config("spark.hadoop.fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem")
       .config("spark.hadoop.fs.AbstractFileSystem.file.impl", "org.apache.hadoop.fs.local.LocalFs")
       .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
+      .config("spark.executor.heartbeatInterval", "60s")
+
+    // Local-only configuration (won't affect production)
+    if (env == "dev") {
+      sparkBuilder
+        .master("local[*]")
+        .config("spark.driver.host", "localhost")
+        .config("spark.driver.bindAddress", "127.0.0.1")
+    }
       .getOrCreate()
 
-    // Disable INFO logs for cleaner output
-    spark.sparkContext.setLogLevel("WARN")
-
+    val spark = sparkBuilder.getOrCreate()
 
     process match {
       case p if  p == "bronze_ingest" && skipBronze  =>
@@ -84,12 +103,14 @@ object Runner {
       case "gold_fact_review_tip" =>
         runDates.foreach(d =>
           FactReviewTipBusinessAgg.run(
-          spark,
-          appConfig,
+            spark,
+            appConfig,
             d,
-          forceMonth,
-          skipDaily,
-          dryRun
+            forceMonth,
+            skipDaily,
+            dryRun,
+            postGresqlUser.getOrElse(""),
+            postGresqlPassword.getOrElse("")
           )
         )
       case "gold_business_popularity" =>
@@ -97,7 +118,9 @@ object Runner {
           BusinessPopularityAgg.run(
             spark,
             appConfig,
-            d
+            d,
+            postGresqlUser.getOrElse(""),
+            postGresqlPassword.getOrElse("")
           )
         )
       case other => sys.error(s"Unknown process: $other")

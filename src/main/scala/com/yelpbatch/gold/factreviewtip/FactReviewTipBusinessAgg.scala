@@ -2,11 +2,9 @@ package com.yelpbatch.gold.factreviewtip
 
 // Imports spark packages
 import com.typesafe.config.Config
-
-import org.apache.spark.sql.{Column, DataFrame, SparkSession}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.TimestampType
-import com.yelpbatch.utils.{DateUtils, Granularity, IOUtils, RawColumns, tableNames, transformColumns}
+import com.yelpbatch.utils.{DateUtils, Granularity, IOUtils, PostgreSQLWriter, RawColumns, tableNames, transformColumns}
 
 object FactReviewTipBusinessAgg {
 
@@ -16,12 +14,14 @@ object FactReviewTipBusinessAgg {
    * RUN: Main execution flow for Fact Review & Tip aggregation
    * Computes daily and/or monthly metrics based on runDate
    *
-   * @param spark         SparkSession
-   * @param config        application config
-   * @param runDateStr    run date string YYYY-MM-DD
-   * @param forceMonthOpt optional YYYY-MM to force monthly run
-   * @param skipDaily     if true, skip daily computation
-   * @param dryRun        if true, skip writes
+   * @param spark              SparkSession
+   * @param config             application config
+   * @param runDateStr         run date string YYYY-MM-DD
+   * @param forceMonthOpt      optional YYYY-MM to force monthly run
+   * @param skipDaily          if true, skip daily computation
+   * @param dryRun             if true, skip writes
+   * @param postGresqlUser     PostgreSQL username
+   * @param postGresqlPassword PostgreSQL password
    */
   def run(
            spark: SparkSession,
@@ -29,7 +29,9 @@ object FactReviewTipBusinessAgg {
            runDateStr: String,
            forceMonthOpt: Option[String],
            skipDaily: Boolean,
-           dryRun: Boolean
+           dryRun: Boolean,
+           postGresqlUser: String = "",
+           postGresqlPassword: String = ""
          ): Unit = {
 
     // Validate and normalize date
@@ -40,7 +42,7 @@ object FactReviewTipBusinessAgg {
     val monthStart = DateUtils.toMonthStart(runDate)
     val monthEnd = DateUtils.toMonthEnd(runDate)
 
-    logger.info(s"Starting execution for runDate=$runDate (isEom=$isEom, ym=$ym)")
+    logger.info(s"[FactReviewTipBusinessAgg] Starting execution for runDate=$runDate (isEom=$isEom, ym=$ym)")
 
     // Get paths from config
     val silverDir: String = config.getString("paths.silverDir")
@@ -74,9 +76,15 @@ object FactReviewTipBusinessAgg {
       persist(
         spark = spark,
         df = dailyMetrics,
-        outputPath = goldPath
+        outputPath = goldPath,
+        hostPostGres = config.getString("postgresql.host"),
+        portPostGres = config.getInt("postgresql.port"),
+        databasePostGres = config.getString("postgresql.database"),
+        postGresEnabled = config.getBoolean("postgresql.enabled"),
+        userPostGres = postGresqlUser,
+        passwordPostGres = postGresqlPassword
       )
-      logger.info(s" Execution completed successfully for " +
+      logger.info(s"[FactReviewTipBusinessAgg] Execution completed successfully for " +
         s"runDate=$runDate, granularity=${Granularity.Daily}")
     }
 
@@ -105,9 +113,15 @@ object FactReviewTipBusinessAgg {
       persist(
         spark = spark,
         df = monthlyMetrics,
-        outputPath = goldPath
+        outputPath = goldPath,
+        hostPostGres = config.getString("postgresql.host"),
+        portPostGres = config.getInt("postgresql.port"),
+        databasePostGres = config.getString("postgresql.database"),
+        postGresEnabled = config.getBoolean("postgresql.enabled"),
+        userPostGres = postGresqlUser,
+        passwordPostGres = postGresqlPassword
       )
-      logger.info(s" Execution completed successfully for " +
+      logger.info(s"[FactReviewTipBusinessAgg] Execution completed successfully for " +
         s"runDate=$runDate, granularity=${Granularity.Monthly}")
     }
   }
@@ -170,16 +184,28 @@ object FactReviewTipBusinessAgg {
 
   /** PERSIST: Write output in wide format (one row per business_id + measure)
    *
-   * @param spark      SparkSession used for writing data
-   * @param df         DataFrame to be persisted
-   * @param outputPath Destination path for the output data
+   * @param spark             SparkSession used for writing data
+   * @param df                DataFrame to be persisted
+   * @param outputPath        Destination path for the output data
+   * @param hostPostGres      PostgreSQL host
+   * @param portPostGres      PostgreSQL port
+   * @param databasePostGres  PostgreSQL database name
+   * @param postGresEnabled   Whether PostgreSQL write is enabled
+   * @param userPostGres      PostgreSQL username
+   * @param passwordPostGres  PostgreSQL password
    */
   private def persist(
                        spark: SparkSession,
                        df: DataFrame,
-                       outputPath: String
+                       outputPath: String,
+                       hostPostGres: String = "",
+                       portPostGres: Int = 5432,
+                       databasePostGres: String = "",
+                       postGresEnabled: Boolean = false,
+                       userPostGres: String = "",
+                       passwordPostGres: String = ""
                      ): Unit = {
-    logger.info(s"Writing data to ${outputPath} layer")
+    logger.info(s"[FactReviewTipBusinessAgg] Writing data to Gold layer")
 
     // Add ingestion timestamp
     val dfWithTs: DataFrame = df
@@ -193,13 +219,40 @@ object FactReviewTipBusinessAgg {
       ColNames.measure)
     val partitionCols: Seq[String] = Seq(transformColumns.day, transformColumns.granularity)
 
-    // Upsert into Delta table
-    IOUtils.upsertDeltaByKey(
-      spark = spark,
-      df = dfWithTs,
-      outputPath = outputPath,
-      keyCols = keyCols,
-      partitionColumns = partitionCols
-    )
+    // Write to PostgreSQL if enabled
+    if (postGresEnabled) {
+      logger.info(s"[FactReviewTipBusinessAgg] Upserting data to PostgreSQL database at $hostPostGres:$portPostGres/$databasePostGres")
+      val jdbcUrl = PostgreSQLWriter.getJDBCUrl(
+        host = hostPostGres,
+        port = portPostGres,
+        database = databasePostGres
+      )
+
+      // Use upsert to handle duplicates (delete existing records for the same day/period_month, then insert)
+      PostgreSQLWriter.upsertToPostgreSQL(
+        spark = spark,
+        df = dfWithTs,
+        jdbcUrl = jdbcUrl,
+        tableName = "gold.fact_review_tip_metrics_wide",
+        user = userPostGres,
+        password = passwordPostGres,
+        deleteKeys = Seq("day", "period_month", "granularity"),  // Delete existing records for this day, period, and granularity
+        enabled = postGresEnabled
+      )
+
+      logger.info("Successfully upserted to " +
+        s"PostgreSQL table gold.fact_review_tip_metrics_wide")
+    }
+    else {
+      // Upsert into Delta table
+      IOUtils.upsertDeltaByKey(
+        spark = spark,
+        df = dfWithTs,
+        outputPath = outputPath,
+        keyCols = keyCols,
+        partitionColumns = partitionCols
+      )
+      logger.info(s"Successfully wrote to $outputPath")
+    }
   }
 }

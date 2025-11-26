@@ -78,9 +78,54 @@ Output is **partitioned by `day` and `granularity`**
 +----------+------------+-----------+--------------------+--------------------+--------+-----+--------------------+--------------------+---------+--------------------+
 ```
 
+## PostgreSQL Integration
+
+### Upsert Strategy (Handling Re-runs)
+
+When writing to PostgreSQL, the process uses a **delete-before-insert** strategy to handle duplicate keys:
+
+**Delete Keys**: `day`, `period_month`
+
+**How it works**:
+1. **Identifies** all unique combinations of `(day, period_month)` in the DataFrame
+2. **Deletes** all existing PostgreSQL records matching those keys
+3. **Inserts** the new data
+
+**Example**: Running for `2020-01-31` (end of month):
+- Deletes all rows where `day='2020-01-31'` AND `period_month='2020-01'`
+- Inserts fresh popularity scores for all businesses
+
+**Benefits**:
+- ✅ **Idempotent**: Safe to re-run the same month-end date multiple times
+- ✅ **No duplicates**: Old data removed before new data inserted
+- ✅ **Complete refresh**: Ensures consistent monthly snapshot
+
+**Configuration**:
+```hocon
+postgresql {
+  enabled = true
+  host = "postgres"
+  port = 5432
+  database = "yelp_analytics"
+}
+```
+
+**Logs**:
+```
+[BusinessPopularityAgg] Upserting business popularity data to PostgreSQL
+[PostgreSQLWriter] Delete keys: day, period_month
+[PostgreSQLWriter] Deleting existing records from gold.business_popularity
+[PostgreSQLWriter] Deleted 119698 existing rows
+[PostgreSQLWriter] Inserting 119698 new rows
+[PostgreSQLWriter] Successfully upserted 119698 rows to gold.business_popularity
+```
+
+---
+
 ## Debugging tips
 - Run counts and distinct counts on each source and aggregated frames (e.g. `reviewAggDF.select("business_id").distinct().count()`) to find where multiplicity appears.
 - Check logs from `IOUtils.upsertDeltaByKey` to see whether a merge or overwrite was used.
+- For PostgreSQL writes, verify upsert logs show deleted and inserted row counts match
 - Sample query to inspect a business:
 ```scala
 df.filter(col("business_id") === "FEXhWNCMkv22qG04E83Qjg").show()

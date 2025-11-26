@@ -47,6 +47,8 @@ def yelp_batch_pipeline():
         task_id="gold_fact_review_tip",
         application=JAR_PATH,
         java_class=CLASS,
+        jars="/opt/airflow/jars/postgresql-42.7.8.jar",  # Add PostgreSQL driver
+        driver_class_path="/opt/airflow/jars/postgresql-42.7.8.jar",  # Add to driver classpath
         application_args=["--process","gold_fact_review_tip",
                           "--env",ENV,
                           "--start_date", "{{ dag_run.conf.get('start_date', dag_run.conf.get('run_date', ds)) }}",
@@ -54,17 +56,23 @@ def yelp_batch_pipeline():
                           "--tables", "{{ dag_run.conf.get('tables', 'business,review,user,checkin,tip') }}",
                           "--force_monthly", "{{ dag_run.conf.get('force_monthly', '') }}",
                           "--skip_daily", "{{ dag_run.conf.get('skip_daily', 'false') }}",
-                          "--dry_run", "{{ dag_run.conf.get('dry_run', 'false') }}"],
+                          "--dry_run", "{{ dag_run.conf.get('dry_run', 'false') }}",
+                          "--pg_user", "{{dag_run.conf.get('pg_user', 'airflow')}}",
+                          "--pg_password", "{{dag_run.conf.get('pg_password', 'airflow')}}"],
     )
 
     gold_business_popularity = SparkSubmitOperator(
         task_id="gold_business_popularity",
         application=JAR_PATH,
         java_class=CLASS,
+        jars= "/opt/airflow/jars/postgresql-42.7.8.jar",  # Add PostgreSQL driver
+        driver_class_path="/opt/airflow/jars/postgresql-42.7.8.jar",  # Add to driver classpath
         application_args=["--process","gold_business_popularity",
                             "--env",ENV,
                             "--start_date", "{{ dag_run.conf.get('start_date', dag_run.conf.get('run_date', ds)) }}",
-                            "--end_date",   "{{ dag_run.conf.get('end_date',   dag_run.conf.get('run_date', ds)) }}"
+                            "--end_date",   "{{ dag_run.conf.get('end_date',   dag_run.conf.get('run_date', ds)) }}",
+                            "--pg_user", "{{dag_run.conf.get('pg_user', 'airflow')}}",
+                            "--pg_password", "{{dag_run.conf.get('pg_password', 'airflow')}}"
                           ],
     )
 
