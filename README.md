@@ -226,6 +226,52 @@ bin\run-local.cmd --process gold_fact_review_tip --env local --run_date 2020-01-
 
 #### 5. Run with Airflow (Orchestrated)
 
+##### ⚠️ Security Setup (First Time Only)
+
+Before starting Airflow, you need a Fernet key for encrypting credentials.
+
+**Automated Setup (Recommended)** 🚀
+```powershell
+# Run the setup script to generate key and create .env file
+python bin/setup.py
+
+# Follow the prompts - it will:
+# 1. Generate a secure Fernet key
+# 2. Create .env file automatically
+# 3. Show you next steps
+
+# See the script: bin/setup.py
+```
+
+**Manual Setup (Alternative)**
+```powershell
+# 1. Copy the template
+cp .env.example .env
+
+# 2. Generate a Fernet key
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# 3. Edit .env and paste your generated key
+# AIRFLOW_FERNET_KEY=<paste-your-key-here>
+```
+
+**Quick Start (Local Development Only)**
+```powershell
+# Use the pre-filled development key
+cp .env.example .env
+# ⚠️ Not secure for production!
+```
+
+**Verify** (after starting Airflow):
+```powershell
+# Check the Fernet key is loaded
+docker exec yelp-batch-project-airflow-scheduler-1 env | Select-String "FERNET"
+```
+
+**⚠️ Security Note**: 
+- The `.env` file is **gitignored** and never committed
+- For production, always generate a new unique key
+
 ##### Start Airflow with Docker
 ```bash
 # Build and start Airflow services
@@ -405,6 +451,64 @@ bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-0
 ```
 
 📖 **For complete setup guide, queries, and troubleshooting, see [sql/README.md](./sql/README.md)**
+
+### Security Best Practices
+
+#### Environment Variables & Secrets
+
+This project uses environment variables for sensitive configuration:
+
+**Files tracked by git**:
+- ✅ `.env.example` - Template with placeholder values
+- ✅ `airflow.cfg.template` - Configuration template without secrets
+- ✅ `docker-compose.yaml` - References environment variables
+
+**Files NOT tracked by git** (in `.gitignore`):
+- 🔒 `.env` - Your actual environment variables
+- 🔒 `airflow/config/airflow.cfg` - Airflow config with Fernet key
+
+#### Fernet Key Management
+
+**Recommended: Automated Setup** 🚀
+```powershell
+# Generate key and create .env automatically
+python bin/setup.py
+
+# The script will:
+# - Generate a cryptographically secure Fernet key
+# - Create .env file with the key
+# - Verify setup is correct
+```
+
+**Manual Setup** (if preferred):
+```powershell
+# 1. Generate a new Fernet key
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# 2. Copy template and update with your key
+cp .env.example .env
+# Edit .env: AIRFLOW_FERNET_KEY=your-generated-key
+```
+
+**Verification**:
+```powershell
+# After starting Airflow, verify key is loaded
+docker exec yelp-batch-project-airflow-scheduler-1 env | Select-String "FERNET"
+```
+
+**⚠️ Important**:
+- Never commit `.env` or `airflow.cfg` to version control
+- Generate a new key for each environment (dev/staging/prod)
+- If you change the key, re-create all Airflow connections
+
+**What Fernet Key Protects**:
+- Airflow database connection passwords
+- API keys stored in Airflow connections
+- Sensitive variables in Airflow
+
+**⚠️ Security Warning**: If you change the Fernet key after storing connections, you must re-create all encrypted connections in Airflow UI.
+
+---
 
 ### Troubleshooting
 

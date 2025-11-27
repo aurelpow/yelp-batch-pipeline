@@ -50,6 +50,13 @@ data/
 .bloop/
 .metals/
 
+### Security - Environment Variables ###
+.env
+.env.local
+
+### Airflow - Sensitive Configuration ###
+airflow/config/airflow.cfg
+
 # SBT
 target/
 project/target/
