@@ -120,16 +120,17 @@ COMMENT ON COLUMN gold.business_popularity.granularity IS
 'Time granularity: 0 = Daily, 2 = Monthly';
 
 -- =============================================================================
--- TABLE 2: FACT REVIEW & TIP METRICS (WIDE FORMAT)
+ -- TABLE 2: FACT REVIEW & TIP METRICS (NARROW FORMAT)
 -- =============================================================================
 -- Purpose: Daily/Monthly aggregated review and tip metrics by business
--- Granularity: One row per business, date, granularity, and measure
--- Key Metrics: Review count, stars, tip count, compliments, sentiment
+-- Granularity: One row per business, date, granularity, and measure combination
+-- Key Metrics: Review count, stars, tip count, compliments, user engagement
 -- Use Case: Business performance tracking, trend analysis, KPI monitoring
+-- Format: Narrow/long format - stacked metrics with measure identifier
 -- =============================================================================
 
 -- Note: Using IF NOT EXISTS makes this script idempotent and safe to re-run
-CREATE TABLE IF NOT EXISTS gold.fact_review_tip_metrics_wide (
+CREATE TABLE IF NOT EXISTS gold.fact_review_tip_metrics (
     -- Primary Keys
     day                 DATE            NOT NULL,
     period_month        VARCHAR(7)      NOT NULL,       -- Format: YYYY-MM
@@ -150,35 +151,37 @@ CREATE TABLE IF NOT EXISTS gold.fact_review_tip_metrics_wide (
 );
 
 -- Indexes for query optimization
-CREATE INDEX idx_frm_day ON gold.fact_review_tip_metrics_wide(day);
-CREATE INDEX idx_frm_period_month ON gold.fact_review_tip_metrics_wide(period_month);
-CREATE INDEX idx_frm_business_measure ON gold.fact_review_tip_metrics_wide(business_id, measure);
-CREATE INDEX idx_frm_measure_units ON gold.fact_review_tip_metrics_wide(measure, units DESC);
-CREATE INDEX idx_frm_granularity ON gold.fact_review_tip_metrics_wide(granularity);
+CREATE INDEX idx_frm_day ON gold.fact_review_tip_metrics(day);
+CREATE INDEX idx_frm_period_month ON gold.fact_review_tip_metrics(period_month);
+CREATE INDEX idx_frm_business_measure ON gold.fact_review_tip_metrics(business_id, measure);
+CREATE INDEX idx_frm_measure_units ON gold.fact_review_tip_metrics(measure, units DESC);
+CREATE INDEX idx_frm_granularity ON gold.fact_review_tip_metrics(granularity);
 
 -- Table comments for documentation
-COMMENT ON TABLE gold.fact_review_tip_metrics_wide IS
-'Fact table containing aggregated review and tip metrics in wide format.
+COMMENT ON TABLE gold.fact_review_tip_metrics IS
+'Fact table containing aggregated review and tip metrics in narrow/long format.
 Each row represents a specific metric (measure) for a business on a given date.
-Supports both daily (granularity=0) and monthly (granularity=2) aggregations.';
+Supports both daily (granularity=0) and monthly (granularity=2) aggregations.
+Narrow format allows flexible metric addition without schema changes.';
 
-COMMENT ON COLUMN gold.fact_review_tip_metrics_wide.measure IS
+COMMENT ON COLUMN gold.fact_review_tip_metrics.measure IS
 'Metric type codes:
 1 = review_count (total reviews)
-2 = avg_review_stars (average star rating, 1-5)
-3 = tip_count (total tips received)
-4 = avg_review_stars_sum (sum of stars for averaging)
-5 = avg_tip_compliments (average compliment count per tip)
-6 = tip_compliments_sum (sum of all compliments)
-7 = positive_sentiment_pct (percentage of positive reviews)
-8 = negative_sentiment_pct (percentage of negative reviews)';
+2 = tip_count (total tips received)
+3 = compliment_count_sum (sum of all tip compliments)
+4 = avg_stars (average review star rating, 1-5)
+5 = total_useful (sum of useful votes on reviews)
+6 = total_funny (sum of funny votes on reviews)
+7 = total_cool (sum of cool votes on reviews)
+8 = distinct_users_review (unique review authors)
+9 = distinct_users_tip (unique tip authors)';
 
-COMMENT ON COLUMN gold.fact_review_tip_metrics_wide.units IS
+COMMENT ON COLUMN gold.fact_review_tip_metrics.units IS
 'Metric value. Interpretation depends on measure type.
 For counts: integer values (stored as double)
-For averages: decimal values (0-5 for stars, 0-100 for percentages)';
+For averages: decimal values (0-5 for stars)';
 
-COMMENT ON COLUMN gold.fact_review_tip_metrics_wide.granularity IS
+COMMENT ON COLUMN gold.fact_review_tip_metrics.granularity IS
 'Time granularity: 0 = Daily metrics, 2 = Monthly metrics (computed at EOM)';
 
 -- =============================================================================
@@ -210,7 +213,7 @@ INSERT INTO gold.measure_codes (measure_id, measure_name, measure_description, m
 ON CONFLICT (measure_id) DO NOTHING;
 
 COMMENT ON TABLE gold.measure_codes IS
-'Reference table defining all metric types used in fact_review_tip_metrics_wide table.';
+'Reference table defining all metric types used in fact_review_tip_metrics table.';
 
 -- =============================================================================
 -- ANALYTICAL VIEWS
@@ -242,14 +245,14 @@ SELECT
     day,
     period_month,
     MAX(CASE WHEN measure = 1 THEN units END) AS review_count,
-    MAX(CASE WHEN measure = 2 THEN units END) AS avg_review_stars,
-    MAX(CASE WHEN measure = 3 THEN units END) AS tip_count,
-    MAX(CASE WHEN measure = 5 THEN units END) AS avg_tip_compliments,
-    MAX(CASE WHEN measure = 7 THEN units END) AS positive_sentiment_pct,
-    MAX(CASE WHEN measure = 8 THEN units END) AS negative_sentiment_pct
-FROM gold.fact_review_tip_metrics_wide
+    MAX(CASE WHEN measure = 4 THEN units END) AS avg_stars,
+    MAX(CASE WHEN measure = 2 THEN units END) AS tip_count,
+    MAX(CASE WHEN measure = 5 THEN units END) AS total_useful,
+    MAX(CASE WHEN measure = 8 THEN units END) AS distinct_users_review,
+    MAX(CASE WHEN measure = 9 THEN units END) AS distinct_users_tip
+FROM gold.fact_review_tip_metrics
 WHERE granularity = 0  -- Daily metrics
-  AND day = (SELECT MAX(day) FROM gold.fact_review_tip_metrics_wide WHERE granularity = 0)
+  AND day = (SELECT MAX(day) FROM gold.fact_review_tip_metrics WHERE granularity = 0)
 GROUP BY business_id, day, period_month;
 
 COMMENT ON VIEW gold.v_latest_review_metrics IS
@@ -308,7 +311,7 @@ BEGIN
     SELECT
         t.table_name::VARCHAR,
         (SELECT COUNT(*) FROM gold.business_popularity WHERE t.table_name = 'business_popularity')::BIGINT
-            + (SELECT COUNT(*) FROM gold.fact_review_tip_metrics_wide WHERE t.table_name = 'fact_review_tip_metrics_wide')::BIGINT,
+            + (SELECT COUNT(*) FROM gold.fact_review_tip_metrics WHERE t.table_name = 'fact_review_tip_metrics')::BIGINT,
         pg_size_pretty(pg_total_relation_size('gold.' || t.table_name))::TEXT,
         CURRENT_TIMESTAMP
     FROM information_schema.tables t
@@ -341,10 +344,10 @@ FROM gold.business_popularity
 WHERE business_id IS NULL
 UNION ALL
 SELECT
-    'fact_review_tip_metrics_wide',
+    'fact_review_tip_metrics',
     COUNT(*),
     'units'
-FROM gold.fact_review_tip_metrics_wide
+FROM gold.fact_review_tip_metrics
 WHERE units IS NULL;
 
 -- =============================================================================
@@ -400,4 +403,3 @@ LIMIT 20;
 
 SELECT 'Gold schema initialization completed successfully!' AS status;
 SELECT 'Created 2 fact tables, 1 reference table, 3 analytical views' AS summary;
-

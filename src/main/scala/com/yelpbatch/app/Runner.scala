@@ -76,18 +76,31 @@ object Runner {
       .appName(s"YelpBatch-$process")
       .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
       .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-      .config("spark.delta.logStore.class", "org.apache.spark.sql.delta.storage.LocalLogStore")
+      .config("spark.delta.logStore.class", "org.apache.spark.sql.delta.storage.LocalLogStore")  // For local filesystem
       .config("spark.hadoop.fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem")
       .config("spark.hadoop.fs.AbstractFileSystem.file.impl", "org.apache.hadoop.fs.local.LocalFs")
-      .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
-      .config("spark.executor.heartbeatInterval", "60s")
+
+    // Read tuning values from application config with safe defaults.
+    val timeParserPolicy =
+      try {
+        if (appConfig.hasPath("tuning.timeParserPolicy")) appConfig.getString("tuning.timeParserPolicy") else "LEGACY"
+      } catch { case _: Throwable => "LEGACY" }
+
+    val executorHeartbeat =
+      try {
+        if (appConfig.hasPath("tuning.executorHeartbeatInterval")) appConfig.getString("tuning.executorHeartbeatInterval") else "60s"
+      } catch { case _: Throwable => "60s" }
+
+    val configuredBuilder = sparkBuilder
+      .config("spark.sql.legacy.timeParserPolicy", timeParserPolicy)
+      .config("spark.executor.heartbeatInterval", executorHeartbeat)
 
     // Local-only configuration (won't affect production)
     if (env == "dev") {
       sparkBuilder
         .master("local[*]")
         .config("spark.driver.host", "localhost")
-        .config("spark.driver.bindAddress", "127.0.0.1")
+        .config("spark.driver.bindAddress", "127.0.0.1") // Force binding to localhost
     }
       .getOrCreate()
 

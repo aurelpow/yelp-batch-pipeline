@@ -274,6 +274,7 @@ docker exec yelp-batch-project-airflow-scheduler-1 env | Select-String "FERNET"
 
 ##### Start Airflow with Docker
 ```bash
+
 # Build and start Airflow services
 docker-compose up -d
 
@@ -327,6 +328,22 @@ You need to manually create the Spark connection in Airflow UI for the DAG to wo
 - If you see "Could not load connection string spark_default, defaulting to yarn" in logs, the connection wasn't created properly
 - Make sure the Connection Id is exactly `spark_default` (lowercase, with underscore)
 - Ensure Connection Type is set to `Spark` (not `HTTP` or other types)
+
+##### Configure Airflow Variables
+
+Set Spark infrastructure variable (one-time setup):
+
+1. **Access Airflow UI**: Navigate to `http://localhost:8080`
+2. **Go to Variables**: Click **Admin** → **Variables** in the top menu
+3. **Add Variable**: Click the **+** button and add:
+
+| Key | Value | Description |
+|-----|-------|-------------|
+| `spark_deploy_mode` | `client` | Where Spark driver runs (client=local, cluster=remote) |
+
+> **Note**: The `env` parameter (which config file to load: local.conf, dev.conf, prod.conf) is **NOT** an Airflow Variable - it's specified per DAG run via trigger JSON.
+
+**📖 For detailed configuration guide, see**: [`docs/SPARK_DEPLOY_MODE_SETUP.md`](docs/SPARK_DEPLOY_MODE_SETUP.md)
 
 ##### Copy JAR to Airflow
 ```bash

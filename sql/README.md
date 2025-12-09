@@ -69,8 +69,8 @@ ORDER BY city_rank
 LIMIT 10;
 ```
 
-#### 2. `fact_review_tip_metrics_wide`
-**Daily/Monthly review and tip metrics in measure-based format**
+#### 2. `fact_review_tip_metrics`
+**Daily/Monthly review and tip metrics in narrow format (stacked metrics)**
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -78,31 +78,34 @@ LIMIT 10;
 | day | DATE | Metric date (PK) |
 | period_month | VARCHAR(7) | YYYY-MM format |
 | granularity | INTEGER | 0=Daily, 2=Monthly (PK) |
-| measure | INTEGER | Metric type 1-8 (PK) |
+| measure | INTEGER | Metric type 1-9 (PK) |
 | units | DOUBLE PRECISION | Metric value |
 | _gold_ingest_ts | TIMESTAMP | Audit timestamp |
 
 **Measure Codes**:
+
 | ID | Measure | Description |
 |----|---------|-------------|
 | 1 | review_count | Total reviews |
-| 2 | avg_review_stars | Average rating (1-5) |
-| 3 | tip_count | Total tips |
-| 4 | avg_review_stars_sum | Sum of ratings |
-| 5 | avg_tip_compliments | Avg compliments/tip |
-| 6 | tip_compliments_sum | Total compliments |
-| 7 | positive_sentiment_pct | % reviews ≥4 stars |
-| 8 | negative_sentiment_pct | % reviews ≤2 stars |
+| 2 | tip_count | Total tips |
+| 3 | compliment_count_sum | Sum of tip compliments |
+| 4 | avg_stars | Average rating (1-5) |
+| 5 | total_useful | Sum of useful votes |
+| 6 | total_funny | Sum of funny votes |
+| 7 | total_cool | Sum of cool votes |
+| 8 | distinct_users_review | Unique review authors |
+| 9 | distinct_users_tip | Unique tip authors |
 
 **Example Query**:
 ```sql
--- Monthly trends for a business (pivot format)
+-- Monthly trends for a business (pivot narrow to wide format)
 SELECT 
     period_month,
     MAX(CASE WHEN measure = 1 THEN units END) AS review_count,
-    MAX(CASE WHEN measure = 2 THEN units END) AS avg_stars,
-    MAX(CASE WHEN measure = 7 THEN units END) AS positive_pct
-FROM gold.fact_review_tip_metrics_wide
+    MAX(CASE WHEN measure = 4 THEN units END) AS avg_stars,
+    MAX(CASE WHEN measure = 2 THEN units END) AS tip_count,
+    MAX(CASE WHEN measure = 5 THEN units END) AS total_useful
+FROM gold.fact_review_tip_metrics
 WHERE business_id = 'YOUR_ID' AND granularity = 2
 GROUP BY period_month
 ORDER BY period_month;
@@ -234,8 +237,8 @@ SELECT
     'business_popularity' as table_name, COUNT(*) as rows 
 FROM gold.business_popularity
 UNION ALL
-SELECT 'fact_review_tip_metrics_wide', COUNT(*) 
-FROM gold.fact_review_tip_metrics_wide;
+SELECT 'fact_review_tip_metrics', COUNT(*) 
+FROM gold.fact_review_tip_metrics;
 ```
 
 **Latest data**:
@@ -267,9 +270,9 @@ SELECT
     bp.city,
     COUNT(DISTINCT bp.business_id) as businesses,
     AVG(bp.popularity_score) as avg_popularity,
-    AVG(CASE WHEN f.measure = 2 THEN f.units END) as avg_rating
+    AVG(CASE WHEN f.measure = 4 THEN f.units END) as avg_rating
 FROM gold.business_popularity bp
-JOIN gold.fact_review_tip_metrics_wide f 
+JOIN gold.fact_review_tip_metrics f 
     ON bp.business_id = f.business_id AND bp.day = f.day
 WHERE bp.period_month = (SELECT month FROM latest)
   AND f.granularity = 2
@@ -297,7 +300,7 @@ SELECT
     MAX(CASE WHEN measure = 1 THEN units END) as reviews,
     LAG(MAX(CASE WHEN measure = 1 THEN units END)) 
         OVER (ORDER BY period_month) as prev_month
-FROM gold.fact_review_tip_metrics_wide
+FROM gold.fact_review_tip_metrics
 WHERE business_id = 'YOUR_ID' AND granularity = 2 AND measure = 1
 GROUP BY period_month
 ORDER BY period_month;
@@ -454,7 +457,7 @@ bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-0
 
 **Delete keys used**:
 - `business_popularity`: Deletes by `day`, `period_month`
-- `fact_review_tip_metrics_wide`: Deletes by `day`, `period_month`, `granularity`
+- `fact_review_tip_metrics`: Deletes by `day`, `period_month`, `granularity`
 
 **Verify no duplicates**:
 ```sql
@@ -485,7 +488,7 @@ docker compose down
 **Slow queries**: Update statistics
 ```sql
 ANALYZE gold.business_popularity;
-ANALYZE gold.fact_review_tip_metrics_wide;
+ANALYZE gold.fact_review_tip_metrics;
 ```
 
 **Check indexes**:
@@ -513,7 +516,7 @@ WHERE city = 'Philadelphia' AND period_month = '2020-01';
 **Vacuum and analyze** (weekly):
 ```sql
 VACUUM ANALYZE gold.business_popularity;
-VACUUM ANALYZE gold.fact_review_tip_metrics_wide;
+VACUUM ANALYZE gold.fact_review_tip_metrics;
 ```
 
 **Check table sizes**:

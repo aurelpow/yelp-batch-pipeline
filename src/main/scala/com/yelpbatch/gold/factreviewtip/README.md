@@ -4,7 +4,7 @@ Location: `src/main/scala/com/yelpbatch/gold/factreviewtip/README.md`
 
 ## Purpose
 - Build a gold fact table combining review and tip metrics per business and period (daily and monthly).
-- Produce an idempotent, partitioned Delta table in **long format** (one row per business + measure) consumable by analytics and downstream jobs.
+- Produce an idempotent, partitioned Delta table in **narrow format** (one row per business + measure combination) consumable by analytics and downstream jobs.
 - Support both daily (granularity=0) and monthly (granularity=2) aggregations.
 
 ## Files
@@ -31,7 +31,7 @@ Location: `src/main/scala/com/yelpbatch/gold/factreviewtip/README.md`
 - **`transform(dataframes, runDate, granularity)`** — Private
   - Aggregates review metrics (review_count, avg_stars, total_useful, total_funny, total_cool, distinct_users_review)
   - Aggregates tip metrics (tip_count, compliment_count_sum, distinct_users_tip)
-  - Produces **long format**: one row per `business_id` + `measure`
+  - Produces **narrow format**: one row per `business_id` + `measure` combination
   - Adds metadata: `day`, `period_month`, `granularity`
   - Returns DataFrame ready for persistence
 
@@ -59,7 +59,8 @@ From `Runner.scala`:
 
 ### Output (Gold)
 - **Delta table**: `gold/fact_review_tip_metrics`
-- **Format**: Long format (one row per business + measure)
+- **PostgreSQL table**: `gold.fact_review_tip_metrics`
+- **Format**: Narrow format (one row per business + measure combination)
 - **Partitioned by**: `day` + `granularity`
 - **Schema**:
   - `day`: date (YYYY-MM-DD, partition key)
@@ -99,8 +100,8 @@ From `Runner.scala`:
 **Interpretation**: 
 - For business `JzQsy7...` on `2020-01-31` (daily, granularity=0), 
 each row represents a specific metric (e.g., review count, average stars, tip count) for that business and day.
-- The `measure_id` column identifies the metric, and the `value` column gives its value. 
-- This long format allows flexible aggregation and analysis across businesses and time periods.
+- The `measure` column identifies the metric, and the `units` column gives its value. 
+- This narrow format (stacked/long format) allows flexible aggregation and analysis across businesses and time periods without schema changes.
 
 ---
 
@@ -128,9 +129,9 @@ When writing to PostgreSQL, the process uses a **delete-before-insert** strategy
 
 **Logs**:
 ```
-[PostgreSQLWriter] Upserting 150000 rows to PostgreSQL table: gold.fact_review_tip_metrics_wide
+[PostgreSQLWriter] Upserting 150000 rows to PostgreSQL table: gold.fact_review_tip_metrics
 [PostgreSQLWriter] Delete keys: day, period_month, granularity
-[PostgreSQLWriter] Deleting existing records from gold.fact_review_tip_metrics_wide
+[PostgreSQLWriter] Deleting existing records from gold.fact_review_tip_metrics
 [PostgreSQLWriter] Deleted 150000 existing rows
 [PostgreSQLWriter] Inserting 150000 new rows
 [PostgreSQLWriter] Successfully upserted 150000 rows
