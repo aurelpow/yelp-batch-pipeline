@@ -97,10 +97,10 @@ From `Runner.scala`:
 +----------+------------+-----------+--------------------+-------+-----+--------------------+
 ```
 
-**Interpretation**: 
-- For business `JzQsy7...` on `2020-01-31` (daily, granularity=0), 
+**Interpretation**:
+- For business `JzQsy7...` on `2020-01-31` (daily, granularity=0),
 each row represents a specific metric (e.g., review count, average stars, tip count) for that business and day.
-- The `measure` column identifies the metric, and the `units` column gives its value. 
+- The `measure` column identifies the metric, and the `units` column gives its value.
 - This narrow format (stacked/long format) allows flexible aggregation and analysis across businesses and time periods without schema changes.
 
 ---

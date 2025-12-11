@@ -55,30 +55,49 @@ mongodb {
 ```
 
 #### Option 2: MongoDB (Optional)
-Load the JSON files into MongoDB collections:
+Load the JSON files into MongoDB collections for production-grade data ingestion.
 
-1. **Start MongoDB** (via Docker or local installation):
+**Quick Setup:**
+
+1. **Start MongoDB container**:
    ```bash
-   docker run -d -p 27017:27017 --name mongodb mongo:7
+   docker compose up -d mongo
    ```
 
-2. **Import data** using `mongoimport`:
-   ```bash
-   mongoimport --db yelpAcademicDatasets --collection business --file yelp_academic_dataset_business.json
-   mongoimport --db yelpAcademicDatasets --collection checkin --file yelp_academic_dataset_checkin.json
-   mongoimport --db yelpAcademicDatasets --collection review --file yelp_academic_dataset_review.json
-   mongoimport --db yelpAcademicDatasets --collection tip --file yelp_academic_dataset_tip.json
-   mongoimport --db yelpAcademicDatasets --collection user --file yelp_academic_dataset_user.json
+2. **Run automated import script**:
+   ```powershell
+   # If script execution is blocked, use bypass flag
+   powershell -ExecutionPolicy Bypass -File .\scripts\import-mongo-data.ps1
+   
+   # Or if scripts are allowed
+   .\scripts\import-mongo-data.ps1
+   ```
+   This will import all 5 JSON files (~15-20 minutes total).
+
+3. **Enable MongoDB in configuration**:
+   - For **Airflow/Docker** (`src/main/resources/local.conf`):
+     ```hocon
+     mongodb {
+       enabled = true
+       uri = "mongodb://mongo:27017"        # Docker service name
+       database = "yelpAcademicDatasets"
+     }
+     ```
+   - For **Local Windows** (`src/main/resources/dev.conf`):
+     ```hocon
+     mongodb {
+       enabled = true
+       uri = "mongodb://localhost:27017"   # Host machine
+       database = "yelpAcademicDatasets"
+     }
+     ```
+
+4. **Verify data**:
+   ```powershell
+   docker exec -it yelp-batch-project-mongo-1 mongosh --quiet --eval "db.getSiblingDB('yelpAcademicDatasets').business.countDocuments()"
    ```
 
-3. **Enable MongoDB in configuration** (`src/main/resources/application.conf`):
-   ```hocon
-   mongodb {
-     enabled = true
-     uri = "mongodb://localhost:27017"
-     database = "yelpAcademicDatasets"
-   }
-   ```
+**📖 For complete setup guide, troubleshooting, and performance tuning, see**: [`docs/MONGODB_SETUP.md`](docs/MONGODB_SETUP.md)
 
 > **Note**: Due to the large file sizes, these files are not included in the repository. You must download them separately from Kaggle before running the pipeline.
 
@@ -174,9 +193,11 @@ The assembly JAR will be created at `target/scala-2.12/yelp-batch-project-assemb
 
 #### 3. Set Up Configuration Files
 Edit the configuration files in `src/main/resources/` for your environment:
-- `local.conf` - for local development
-- `dev.conf` - for development environment
-- `prod.conf` - for production environment
+- **`dev.conf`** - for local Windows development (without Docker)
+- **`local.conf`** - for Docker/Airflow environment (local testing)
+- **`prod.conf`** - for production environment
+
+> **📖 Important**: Understanding which config file to use is crucial! See [Configuration Files Guide](docs/CONFIG_FILES_GUIDE.md) for detailed explanations and common mistakes to avoid.
 
 Key configurations to update:
 - MongoDB connection strings (if using MongoDB as source)
@@ -341,7 +362,12 @@ Set Spark infrastructure variable (one-time setup):
 |-----|-------|-------------|
 | `spark_deploy_mode` | `client` | Where Spark driver runs (client=local, cluster=remote) |
 
-> **Note**: The `env` parameter (which config file to load: local.conf, dev.conf, prod.conf) is **NOT** an Airflow Variable - it's specified per DAG run via trigger JSON.
+> **Note**: The `env` parameter selects which config file to load:
+> - `env: "local"` → uses `local.conf` (for local Windows execution)
+> - `env: "dev"` → uses `dev.conf` (for Docker/Airflow)
+> - `env: "prod"` → uses `prod.conf` (for production)
+> 
+> This is **NOT** an Airflow Variable - it's specified per DAG run via trigger JSON.
 
 **📖 For detailed configuration guide, see**: [`docs/SPARK_DEPLOY_MODE_SETUP.md`](docs/SPARK_DEPLOY_MODE_SETUP.md)
 
@@ -410,15 +436,26 @@ The schema automatically creates:
 - 10 strategic indexes for performance
 
 2. **Enable PostgreSQL writes** in your configuration:
-```hocon
-# src/main/resources/dev.conf or local.conf
-postgresql {
-  enabled = true
-  host = "host.docker.internal"  # or "postgres" from Airflow
-  port = 5432
-  database = "airflow"
-}
-```
+
+   **For Airflow/Docker** (`src/main/resources/local.conf`):
+   ```hocon
+   postgresql {
+     enabled = true
+     host = "postgres"              # Docker service name
+     port = 5432
+     database = "airflow"
+   }
+   ```
+
+   **For Local Windows** (`src/main/resources/dev.conf`):
+   ```hocon
+   postgresql {
+     enabled = true
+     host = "localhost"             # or "host.docker.internal" if connecting to Docker
+     port = 5433                    # Mapped port
+     database = "yelp_analytics"
+   }
+   ```
 
 3. **Run Gold processes with PostgreSQL credentials**:
 ```powershell
@@ -451,10 +488,10 @@ This makes the pipeline **idempotent** - you can safely re-run the same date mul
 
 ```powershell
 # First run - inserts data
-bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
+bin\run-local.cmd --process gold_business_popularity --env local --run_date 2020-01-31 --pg_user postgres --pg_password postgres
 
 # Second run (same date) - deletes old data, inserts fresh data (no duplicate key error!)
-bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
+bin\run-local.cmd --process gold_business_popularity --env local --run_date 2020-01-31 --pg_user postgres --pg_password postgres
 ```
 
 **Logs will show**:
@@ -565,6 +602,17 @@ bin\run-local.cmd --process bronze_ingest --env local --tables "checkin"
 ```bash
 # Caused by multiple business versions - already handled in readData
 # Check logs for deduplication: "dropDuplicates(Seq(business_id))"
+```
+
+**6. MongoDB connection issues**
+```powershell
+# Verify MongoDB setup
+.\scripts\check-mongo-setup.ps1
+
+# Common fixes:
+# - Check container is running: docker ps --filter "name=mongo"
+# - Verify data is imported: see docs/MONGODB_SETUP.md
+# - Check URI in config matches environment (mongo vs localhost)
 ```
 
 ### Monitoring

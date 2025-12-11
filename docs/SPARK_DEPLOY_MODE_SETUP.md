@@ -3,6 +3,21 @@
 ## Overview
 This guide explains how Spark deploy mode is managed across different environments (local, dev, prod) in the Yelp Batch Pipeline project.
 
+## Configuration Files Quick Reference
+
+The project uses different config files for different execution environments:
+
+| Config File | Usage | Execution Environment | Paths | MongoDB URI |
+|-------------|-------|----------------------|-------|-------------|
+| **`dev.conf`** | Local Windows development | `bin\run-local.cmd --env dev` | `C:/Users/aureb/...` | `mongodb://localhost:27017` |
+| **`local.conf`** | Docker/Airflow testing | Airflow DAG with `"env": "local"` | `/opt/airflow/...` | `mongodb://mongo:27017` |
+| **`prod.conf`** | Production deployment | Airflow DAG with `"env": "prod"` | Cloud storage paths | External MongoDB URI |
+
+**Key Point**: 
+- Use **`dev.conf`** when running Spark jobs **directly from Windows** (no Docker)
+- Use **`local.conf`** when running Spark jobs **inside Docker containers** (via Airflow)
+- Use **`prod.conf`** for **production** deployments
+
 ## What is Spark Deploy Mode?
 
 Spark deploy mode determines where the Spark driver process runs:
@@ -32,14 +47,14 @@ spark {
 }
 ```
 
-**`dev.conf`** (local development):
+**`local.conf`** (local Windows execution - without Docker):
 ```hocon
 spark {
   deployMode = "client"
 }
 ```
 
-**`local.conf`** (Airflow Docker):
+**`dev.conf`** (Docker/Airflow execution):
 ```hocon
 spark {
   deployMode = "client"
@@ -133,32 +148,35 @@ For more advanced configuration, you can set deploy mode in the Spark connection
 
 ## Environment-Specific Setup
 
-### Local Development (Docker Airflow)
+### Docker/Airflow Environment (local.conf)
 
 **Deploy Mode**: `client` (Spark infrastructure - driver runs in Airflow container)  
-**Environment Config**: `local` (Application config - loads local.conf)  
-**Reason**: Airflow scheduler and Spark run in the same container
+**Environment Config**: `local` (Application config - loads `local.conf`)  
+**Reason**: Airflow scheduler and Spark run in the same Docker container  
+**Paths**: Docker container paths (`/opt/airflow/...`)  
+**MongoDB URI**: `mongodb://mongo:27017` (Docker service name)
 
 **Airflow Variables:**
 ```
 spark_deploy_mode = "client"
 ```
 
-**Test Run (with optional env override):**
-```bash
-# Default: uses 'local' env (DEFAULT_ENV in DAG)
-docker exec -it yelp-batch-project-airflow-scheduler-1 airflow dags trigger yelp_batch_pipeline
-
-# Or specify env in trigger config:
-docker exec -it yelp-batch-project-airflow-scheduler-1 airflow dags trigger yelp_batch_pipeline \
-  --conf '{"env": "local", "run_date": "2020-01-31"}'
+**Trigger DAG via Airflow UI:**
+```json
+{
+  "env": "local",
+  "run_date": "2020-01-31",
+  "tables": ["business"]
+}
 ```
 
-### Dev Environment (Windows Local Spark)
+### Local Windows Development (local.conf)
 
 **Deploy Mode**: `client` (Spark infrastructure - for local development)  
-**Environment Config**: `dev` (Application config - loads dev.conf)  
-**Reason**: Running spark-submit from local Windows machine
+**Environment Config**: `local` (Application config - loads `local.conf`)  
+**Reason**: Running spark-submit from Windows machine without Docker  
+**Paths**: Windows file paths (`C:/Users/aureb/...`)  
+**MongoDB URI**: `mongodb://localhost:27017` (host machine)
 
 **Airflow Variables (if using Airflow):**
 ```
@@ -167,7 +185,7 @@ spark_deploy_mode = "client"
 
 **Command Line (without Airflow):**
 ```powershell
-bin\run-local.cmd --process bronze_ingest --env dev --run_date 2020-01-31
+bin\run-local.cmd --process bronze_ingest --env local --run_date 2020-01-31
 ```
 
 **DAG Trigger (with Airflow):**

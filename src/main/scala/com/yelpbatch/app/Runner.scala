@@ -81,30 +81,31 @@ object Runner {
       .config("spark.hadoop.fs.AbstractFileSystem.file.impl", "org.apache.hadoop.fs.local.LocalFs")
 
     // Read tuning values from application config with safe defaults.
-    val timeParserPolicy =
+    val timeParserPolicy: String =
       try {
         if (appConfig.hasPath("tuning.timeParserPolicy")) appConfig.getString("tuning.timeParserPolicy") else "LEGACY"
       } catch { case _: Throwable => "LEGACY" }
 
-    val executorHeartbeat =
+    val executorHeartbeat: String =
       try {
         if (appConfig.hasPath("tuning.executorHeartbeatInterval")) appConfig.getString("tuning.executorHeartbeatInterval") else "60s"
       } catch { case _: Throwable => "60s" }
 
-    val configuredBuilder = sparkBuilder
+    val configuredBuilder: SparkSession.Builder = sparkBuilder
       .config("spark.sql.legacy.timeParserPolicy", timeParserPolicy)
       .config("spark.executor.heartbeatInterval", executorHeartbeat)
 
     // Local-only configuration (won't affect production)
-    if (env == "dev") {
+    val finalBuilder: SparkSession.Builder = if (env == "local") {
       sparkBuilder
         .master("local[*]")
         .config("spark.driver.host", "localhost")
         .config("spark.driver.bindAddress", "127.0.0.1") // Force binding to localhost
+    } else {
+      configuredBuilder
     }
-      .getOrCreate()
-
-    val spark = sparkBuilder.getOrCreate()
+    // Create Spark session
+    val spark = finalBuilder.getOrCreate()
 
     process match {
       case p if  p == "bronze_ingest" && skipBronze  =>
