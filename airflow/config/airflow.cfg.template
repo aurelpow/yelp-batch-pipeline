@@ -7,7 +7,7 @@
 #
 # To use:
 # 1. Copy this file to airflow/config/airflow.cfg
-# 2. Generate a fernet key:
+# 2. Generate a fernet key: 
 #    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 # 3. Replace the fernet_key value in airflow/config/airflow.cfg
 #
@@ -21,4 +21,3 @@
 fernet_key = YOUR_GENERATED_FERNET_KEY_HERE
 
 # ... other airflow configuration ...
-
