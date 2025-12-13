@@ -27,8 +27,8 @@ object Runner {
     val endOpt: Option[String] = m.get("end_date")            // YYYY-MM-DD
     val tablesOpt:Option[String]  = m.get("tables") // comma-separated table names
     val forceMonth: Option[String] = m.get("force_monthly")       // YYYY-MM
-    val postGresqlUser: Option[String] = m.get("pg_user")       // PostgreSQL user
-    val postGresqlPassword: Option[String] = m.get("pg_password") // PostgreSQL password
+    val postGreSqlUser: Option[String] = m.get("pg_user")       // PostGreSQL user
+    val postGreSqlPassword: Option[String] = m.get("pg_password") // PostGreSQL password
 
     // Helper function to parse boolean flags
     def getBooleanFlag(key: String): Boolean = {
@@ -76,22 +76,38 @@ object Runner {
       .appName(s"YelpBatch-$process")
       .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
       .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-      .config("spark.delta.logStore.class", "org.apache.spark.sql.delta.storage.LocalLogStore")
+      .config("spark.delta.logStore.class", "org.apache.spark.sql.delta.storage.LocalLogStore")  // For local filesystem
       .config("spark.hadoop.fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem")
       .config("spark.hadoop.fs.AbstractFileSystem.file.impl", "org.apache.hadoop.fs.local.LocalFs")
-      .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
-      .config("spark.executor.heartbeatInterval", "60s")
 
-    // Local-only configuration (won't affect production)
-    if (env == "dev") {
-      sparkBuilder
+    // Read tuning values from application config with safe defaults.
+    val timeParserPolicy: String =
+      try {
+        if (appConfig.hasPath("tuning.timeParserPolicy")) appConfig.getString("tuning.timeParserPolicy") else "LEGACY"
+      } catch { case _: Throwable => "LEGACY" }
+
+    val executorHeartbeat: String =
+      try {
+        if (appConfig.hasPath("tuning.executorHeartbeatInterval")) appConfig.getString("tuning.executorHeartbeatInterval") else "60s"
+      } catch { case _: Throwable => "60s" }
+
+    // Add tuning configurations to base builder
+    val configuredBuilder: SparkSession.Builder = sparkBuilder
+      .config("spark.sql.legacy.timeParserPolicy", timeParserPolicy)
+      .config("spark.executor.heartbeatInterval", executorHeartbeat)
+
+    // Apply environment-specific configuration
+    val finalBuilder: SparkSession.Builder = if (env == "local") {
+      configuredBuilder
         .master("local[*]")
         .config("spark.driver.host", "localhost")
         .config("spark.driver.bindAddress", "127.0.0.1")
+    } else {
+      configuredBuilder
     }
-      .getOrCreate()
-
-    val spark = sparkBuilder.getOrCreate()
+    
+    // Create Spark session
+    val spark = finalBuilder.getOrCreate()
 
     process match {
       case p if  p == "bronze_ingest" && skipBronze  =>
@@ -109,8 +125,8 @@ object Runner {
             forceMonth,
             skipDaily,
             dryRun,
-            postGresqlUser.getOrElse(""),
-            postGresqlPassword.getOrElse("")
+            postGreSqlUser.getOrElse(""),
+            postGreSqlPassword.getOrElse("")
           )
         )
       case "gold_business_popularity" =>
@@ -119,8 +135,8 @@ object Runner {
             spark,
             appConfig,
             d,
-            postGresqlUser.getOrElse(""),
-            postGresqlPassword.getOrElse("")
+            postGreSqlUser.getOrElse(""),
+            postGreSqlPassword.getOrElse("")
           )
         )
       case other => sys.error(s"Unknown process: $other")

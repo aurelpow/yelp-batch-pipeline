@@ -8,7 +8,7 @@ object ColNames {
 
 /** Measure codes  */
 object MeasureFactReviewTip {
-  // Measure mapping to columns (wide format)
+  // Measure mapping to columns (narrow format)
   val reviewCount: Int =  1
   val tipCount: Int = 2
   val complimentCountSum: Int = 3

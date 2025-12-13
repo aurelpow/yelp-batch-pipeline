@@ -182,7 +182,7 @@ object FactReviewTipBusinessAgg {
     combinedDf
   }
 
-  /** PERSIST: Write output in wide format (one row per business_id + measure)
+  /** PERSIST: Write output in narrow format (one row per business_id + measure combination)
    *
    * @param spark             SparkSession used for writing data
    * @param df                DataFrame to be persisted
@@ -233,7 +233,7 @@ object FactReviewTipBusinessAgg {
         spark = spark,
         df = dfWithTs,
         jdbcUrl = jdbcUrl,
-        tableName = "gold.fact_review_tip_metrics_wide",
+        tableName = "gold.fact_review_tip_metrics",
         user = userPostGres,
         password = passwordPostGres,
         deleteKeys = Seq("day", "period_month", "granularity"),  // Delete existing records for this day, period, and granularity
@@ -241,7 +241,7 @@ object FactReviewTipBusinessAgg {
       )
 
       logger.info("Successfully upserted to " +
-        s"PostgreSQL table gold.fact_review_tip_metrics_wide")
+        s"PostgreSQL table gold.fact_review_tip_metrics")
     }
     else {
       // Upsert into Delta table
