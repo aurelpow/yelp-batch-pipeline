@@ -75,7 +75,7 @@ Load the JSON files into MongoDB collections for production-grade data ingestion
    This will import all 5 JSON files (~15-20 minutes total).
 
 3. **Enable MongoDB in configuration**:
-   - For **Airflow/Docker** (`src/main/resources/local.conf`):
+   - For **Airflow/Docker** (`src/main/resources/dev.conf`):
      ```hocon
      mongodb {
        enabled = true
@@ -83,7 +83,7 @@ Load the JSON files into MongoDB collections for production-grade data ingestion
        database = "yelpAcademicDatasets"
      }
      ```
-   - For **Local Windows** (`src/main/resources/dev.conf`):
+   - For **Local Windows** (`src/main/resources/local.conf`):
      ```hocon
      mongodb {
        enabled = true
@@ -193,8 +193,8 @@ The assembly JAR will be created at `target/scala-2.12/yelp-batch-project-assemb
 
 #### 3. Set Up Configuration Files
 Edit the configuration files in `src/main/resources/` for your environment:
-- **`dev.conf`** - for local Windows development (without Docker)
-- **`local.conf`** - for Docker/Airflow environment (local testing)
+- **`local.conf`** - for local Windows development (without Docker)
+- **`dev.conf`** - for Docker/Airflow environment 
 - **`prod.conf`** - for production environment
 
 > **📖 Important**: Understanding which config file to use is crucial! See [Configuration Files Guide](docs/CONFIG_FILES_GUIDE.md) for detailed explanations and common mistakes to avoid.
@@ -437,22 +437,22 @@ The schema automatically creates:
 
 2. **Enable PostgreSQL writes** in your configuration:
 
-   **For Airflow/Docker** (`src/main/resources/local.conf`):
+   **For Airflow/Docker** (`src/main/resources/dev.conf`):
    ```hocon
    postgresql {
      enabled = true
      host = "postgres"              # Docker service name
-     port = 5432
-     database = "airflow"
+     port = 5433
+     database = "yelp_analytics"
    }
    ```
 
-   **For Local Windows** (`src/main/resources/dev.conf`):
+   **For Local Windows** (`src/main/resources/local.conf`):
    ```hocon
    postgresql {
      enabled = true
-     host = "localhost"             # or "host.docker.internal" if connecting to Docker
-     port = 5433                    # Mapped port
+     host = "localhost"   
+     port = 5432 # Local PostgreSQL instance port
      database = "yelp_analytics"
    }
    ```

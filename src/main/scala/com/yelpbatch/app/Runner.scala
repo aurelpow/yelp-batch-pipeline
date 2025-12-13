@@ -27,8 +27,8 @@ object Runner {
     val endOpt: Option[String] = m.get("end_date")            // YYYY-MM-DD
     val tablesOpt:Option[String]  = m.get("tables") // comma-separated table names
     val forceMonth: Option[String] = m.get("force_monthly")       // YYYY-MM
-    val postGresqlUser: Option[String] = m.get("pg_user")       // PostgreSQL user
-    val postGresqlPassword: Option[String] = m.get("pg_password") // PostgreSQL password
+    val postGreSqlUser: Option[String] = m.get("pg_user")       // PostGreSQL user
+    val postGreSqlPassword: Option[String] = m.get("pg_password") // PostGreSQL password
 
     // Helper function to parse boolean flags
     def getBooleanFlag(key: String): Boolean = {
@@ -91,19 +91,21 @@ object Runner {
         if (appConfig.hasPath("tuning.executorHeartbeatInterval")) appConfig.getString("tuning.executorHeartbeatInterval") else "60s"
       } catch { case _: Throwable => "60s" }
 
+    // Add tuning configurations to base builder
     val configuredBuilder: SparkSession.Builder = sparkBuilder
       .config("spark.sql.legacy.timeParserPolicy", timeParserPolicy)
       .config("spark.executor.heartbeatInterval", executorHeartbeat)
 
-    // Local-only configuration (won't affect production)
+    // Apply environment-specific configuration
     val finalBuilder: SparkSession.Builder = if (env == "local") {
-      sparkBuilder
+      configuredBuilder
         .master("local[*]")
         .config("spark.driver.host", "localhost")
-        .config("spark.driver.bindAddress", "127.0.0.1") // Force binding to localhost
+        .config("spark.driver.bindAddress", "127.0.0.1")
     } else {
       configuredBuilder
     }
+    
     // Create Spark session
     val spark = finalBuilder.getOrCreate()
 
@@ -123,8 +125,8 @@ object Runner {
             forceMonth,
             skipDaily,
             dryRun,
-            postGresqlUser.getOrElse(""),
-            postGresqlPassword.getOrElse("")
+            postGreSqlUser.getOrElse(""),
+            postGreSqlPassword.getOrElse("")
           )
         )
       case "gold_business_popularity" =>
@@ -133,8 +135,8 @@ object Runner {
             spark,
             appConfig,
             d,
-            postGresqlUser.getOrElse(""),
-            postGresqlPassword.getOrElse("")
+            postGreSqlUser.getOrElse(""),
+            postGreSqlPassword.getOrElse("")
           )
         )
       case other => sys.error(s"Unknown process: $other")

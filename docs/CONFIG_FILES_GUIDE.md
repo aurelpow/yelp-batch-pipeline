@@ -18,7 +18,7 @@ The Yelp Batch Pipeline uses **environment-specific configuration files** to han
 
 ## Detailed Breakdown
 
-### 1. `dev.conf` - Local Windows Development
+### 1. `local.conf` - Local Windows Development
 
 **Use this when:**
 - ✅ Testing locally on your Windows machine
@@ -48,8 +48,6 @@ postgresql {
   host = "localhost"              # or "host.docker.internal"
   port = 5433                     # Docker mapped port
   database = "yelp_analytics"
-  user = "postgres"
-  password = "your_password"
 }
 
 # Spark
@@ -98,7 +96,7 @@ postgresql {
   enabled = true
   host = "postgres"               # Docker service name
   port = 5432                     # Internal Docker port (NOT 5433!)
-  database = "airflow"
+  database = "yelp_analytics"
   user = "airflow"
   password = "airflow"
 }
@@ -201,12 +199,12 @@ This will fail because Airflow containers can't access Windows paths like `C:/Us
 
 ### ❌ Mistake 3: Wrong MongoDB URI in config
 ```hocon
-# In local.conf (Docker) - WRONG
+# In dev.conf (Docker) - WRONG
 mongodb {
   uri = "mongodb://localhost:27017"  # ❌ Wrong - "localhost" in Docker points to container itself
 }
 
-# In dev.conf (Windows) - WRONG
+# In local.conf (Windows) - WRONG
 mongodb {
   uri = "mongodb://mongo:27017"      # ❌ Wrong - "mongo" service name only exists in Docker network
 }
@@ -229,16 +227,16 @@ mongodb {
 
 ### ❌ Mistake 4: Wrong PostgreSQL port
 ```hocon
-# In local.conf (Docker) - WRONG
+# In dev.conf (Docker) - WRONG
 postgresql {
   host = "postgres"
-  port = 5433                         # ❌ Wrong - 5433 is the MAPPED port on host
+  port = 5432                         # ❌ Wrong - 5432 is the MAPPED port on host
 }
 
-# In dev.conf (Windows) - WRONG
+# In local.conf (Windows) - WRONG
 postgresql {
   host = "localhost"
-  port = 5432                         # ❌ Wrong - 5432 is used by local PostgreSQL
+  port = 5433                       # ❌ Wrong - 5433 is used by local PostgreSQL
 }
 ```
 
@@ -247,13 +245,13 @@ postgresql {
 # dev.conf (Docker - internal network)
 postgresql {
   host = "postgres"
-  port = 5432                         # ✅ Internal Docker port
+  port = 5433                         # ✅ Internal Docker port
 }
 
 # local.conf (Windows - host machine)
 postgresql {
   host = "localhost"
-  port = 5433                         # ✅ Mapped port to avoid conflicts
+  port = 5432                         # ✅ Mapped port to avoid conflicts
 }
 ```
 
@@ -291,44 +289,44 @@ postgresql {
 
 Before running the pipeline, verify you're using the correct config:
 
-### For Local Windows Development (`dev.conf`)
+### For Local Windows Development (`local.conf`)
 - [ ] Running from: Windows PowerShell/CMD
-- [ ] Command: `bin\run-local.cmd --env dev`
+- [ ] Command: `bin\run-local.cmd --env local`
 - [ ] Paths: Windows style (`C:/Users/...`)
 - [ ] MongoDB: `mongodb://localhost:27017`
-- [ ] PostgreSQL: `localhost:5433`
+- [ ] PostgreSQL: `localhost:5432`
 
-### For Docker/Airflow (`local.conf`)
+### For Docker/Airflow (`dev.conf`)
 - [ ] Running from: Airflow UI or Docker exec
-- [ ] Command: Trigger with `"env": "local"`
+- [ ] Command: Trigger with `"env": "dev"`
 - [ ] Paths: Docker style (`/opt/airflow/...`)
 - [ ] MongoDB: `mongodb://mongo:27017`
-- [ ] PostgreSQL: `postgres:5432`
+- [ ] PostgreSQL: `postgres:5433`
 
 ---
 
 ## Testing Your Configuration
 
-### Test `dev.conf` (Windows)
+### Test `local.conf` (Windows)
 ```powershell
 # 1. Verify MongoDB is accessible from Windows
 docker exec yelp-batch-project-mongo-1 mongosh --quiet --eval "db.version()"
 
 # 2. Run a simple bronze ingestion
-bin\run-local.cmd --process bronze_ingest --env dev --tables "business" --run_date 2020-01-31
+bin\run-local.cmd --process bronze_ingest --env local --tables "business" --run_date 2020-01-31
 
 # 3. Check output in Windows paths
 ls data/bronze/business
 ```
 
-### Test `local.conf` (Docker/Airflow)
+### Test `dev.conf` (Docker/Airflow)
 ```powershell
 # 1. Verify all containers are running
 docker ps
 
 # 2. Trigger DAG via Airflow UI with config:
 # {
-#   "env": "local",
+#   "env": "dev",
 #   "run_date": "2020-01-31",
 #   "tables": ["business"]
 # }
@@ -360,11 +358,11 @@ docker logs yelp-batch-project-airflow-scheduler-1 --tail 100
 
 ## Summary
 
-| Scenario | Config File | Command/Trigger |
-|----------|-------------|----------------|
-| Quick local test on Windows | `dev.conf` | `bin\run-local.cmd --env dev` |
-| Full pipeline test with Airflow | `local.conf` | Airflow UI: `"env": "local"` |
-| Production deployment | `prod.conf` | Airflow UI: `"env": "prod"` |
+| Scenario | Config File  | Command/Trigger                 |
+|----------|--------------|---------------------------------|
+| Quick local test on Windows | `local.conf` | `bin\run-local.cmd --env local` |
+| Full pipeline test with Airflow | `dev.conf`   | Airflow UI: `"env": "dev"`      |
+| Production deployment | `prod.conf`  | Airflow UI: `"env": "prod"`     |
 
 **Remember:** The `--env` or `"env"` parameter determines which `.conf` file is loaded. Always match your execution environment to the correct config file!
 

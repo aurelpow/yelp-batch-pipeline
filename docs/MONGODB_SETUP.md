@@ -109,9 +109,9 @@ Collections:
 
 Edit your environment config file based on how you run the pipeline:
 
-**For Docker/Airflow** (`src/main/resources/local.conf`):
+**For Docker/Airflow** (`src/main/resources/dev.conf`):
 ```hocon
-# local.conf - for Airflow/Docker execution
+# dev.conf - for Airflow/Docker execution
 mongodb {
   enabled = true
   uri = "mongodb://mongo:27017"           # Docker service name
@@ -119,9 +119,9 @@ mongodb {
 }
 ```
 
-**For Local Development** (`src/main/resources/dev.conf`):
+**For Local Development** (`src/main/resources/local.conf`):
 ```hocon
-# dev.conf - for local Windows execution (bin\run-local.cmd)
+# local.conf - for local Windows execution (bin\run-local.cmd)
 mongodb {
   enabled = true
   uri = "mongodb://localhost:27017"      # Host machine connection
@@ -241,13 +241,13 @@ Once MongoDB is configured and populated:
 Run from Windows terminal **without Docker**:
 
 ```powershell
-# Uses dev.conf (local Windows paths + localhost MongoDB)
-bin\run-local.cmd --process bronze_ingest --env dev --tables "business" --run_date 2020-01-31
+# Uses local.conf (local Windows paths + localhost MongoDB)
+bin\run-local.cmd --process bronze_ingest --env local --tables "business" --run_date 2020-01-31
 ```
 
-**Configuration check** (`src/main/resources/dev.conf`):
+**Configuration check** (`src/main/resources/local.conf`):
 ```hocon
-# dev.conf - for local Windows execution
+# local.conf - for local Windows execution
 mongodb {
   enabled = true
   uri = "mongodb://localhost:27017"  # Host machine connection
@@ -266,7 +266,7 @@ Trigger DAG via Airflow UI with configuration:
 
 ```json
 {
-  "env": "local",
+  "env": "dev",
   "start_date": "2020-01-25",
   "end_date": "2020-01-31",
   "tables": ["business", "review", "tip"],
@@ -274,9 +274,9 @@ Trigger DAG via Airflow UI with configuration:
 }
 ```
 
-**Configuration check** (`src/main/resources/local.conf`):
+**Configuration check** (`src/main/resources/dev.conf`):
 ```hocon
-# local.conf - for Airflow/Docker execution
+# dev.conf - for Airflow/Docker execution
 mongodb {
   enabled = true
   uri = "mongodb://mongo:27017"  # Docker service name (container-to-container)
@@ -497,7 +497,7 @@ You can toggle between MongoDB and file system without code changes by modifying
 
 ### Use MongoDB
 
-**For Airflow/Docker** (`local.conf`):
+**For Airflow/Docker** (`dev.conf`):
 ```hocon
 mongodb {
   enabled = true
@@ -506,14 +506,14 @@ mongodb {
 }
 ```
 
-**For Local Development** (`dev.conf`):
+**For Local Development** (`local.conf`):
 ```hocon
 mongodb {
   enabled = true
   uri = "mongodb://localhost:27017"  # Host machine
   database = "yelpAcademicDatasets"
 }
-```
+``` 
 
 ### Use File System
 

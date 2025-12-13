@@ -7,15 +7,15 @@ This guide explains how Spark deploy mode is managed across different environmen
 
 The project uses different config files for different execution environments:
 
-| Config File | Usage | Execution Environment | Paths | MongoDB URI |
-|-------------|-------|----------------------|-------|-------------|
-| **`dev.conf`** | Local Windows development | `bin\run-local.cmd --env dev` | `C:/Users/aureb/...` | `mongodb://localhost:27017` |
-| **`local.conf`** | Docker/Airflow testing | Airflow DAG with `"env": "local"` | `/opt/airflow/...` | `mongodb://mongo:27017` |
-| **`prod.conf`** | Production deployment | Airflow DAG with `"env": "prod"` | Cloud storage paths | External MongoDB URI |
+| Config File      | Usage | Execution Environment            | Paths | MongoDB URI |
+|------------------|-------|----------------------------------|-------|-------------|
+| **`local.conf`** | Local Windows development | `bin\run-local.cmd --env local`  | `C:/Users/aureb/...` | `mongodb://localhost:27017` |
+| **`dev.conf`**   | Docker/Airflow testing | Airflow DAG with `"env": "dev"`  | `/opt/airflow/...` | `mongodb://mongo:27017` |
+| **`prod.conf`**  | Production deployment | Airflow DAG with `"env": "prod"` | Cloud storage paths | External MongoDB URI |
 
 **Key Point**: 
-- Use **`dev.conf`** when running Spark jobs **directly from Windows** (no Docker)
-- Use **`local.conf`** when running Spark jobs **inside Docker containers** (via Airflow)
+- Use **`local.conf`** when running Spark jobs **directly from Windows** (no Docker)
+- Use **`dev.conf`** when running Spark jobs **inside Docker containers** (via Airflow)
 - Use **`prod.conf`** for **production** deployments
 
 ## What is Spark Deploy Mode?
@@ -148,10 +148,10 @@ For more advanced configuration, you can set deploy mode in the Spark connection
 
 ## Environment-Specific Setup
 
-### Docker/Airflow Environment (local.conf)
+### Docker/Airflow Environment (dev.conf)
 
 **Deploy Mode**: `client` (Spark infrastructure - driver runs in Airflow container)  
-**Environment Config**: `local` (Application config - loads `local.conf`)  
+**Environment Config**: `dev` (Application config - loads `dev.conf`)  
 **Reason**: Airflow scheduler and Spark run in the same Docker container  
 **Paths**: Docker container paths (`/opt/airflow/...`)  
 **MongoDB URI**: `mongodb://mongo:27017` (Docker service name)
@@ -164,7 +164,7 @@ spark_deploy_mode = "client"
 **Trigger DAG via Airflow UI:**
 ```json
 {
-  "env": "local",
+  "env": "dev",
   "run_date": "2020-01-31",
   "tables": ["business"]
 }
