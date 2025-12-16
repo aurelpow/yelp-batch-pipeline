@@ -111,7 +111,7 @@ object SilverIngest {
 
     // Apply transformations only on filtered data
     val silverTable = transformTable(tableName, filteredBronze)
-      .withColumn("_silver_ingest_ts", current_timestamp())
+      .withColumn(transformColumns.silverIngestTs, current_timestamp())
       .withColumn(transformColumns.day, lit(runDate))
 
     if (silverTable.isEmpty) {

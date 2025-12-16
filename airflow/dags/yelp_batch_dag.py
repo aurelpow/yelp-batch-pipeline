@@ -7,7 +7,14 @@ from airflow.models import Variable
 # Constants
 JAR_PATH = "/opt/airflow/jars/yelp-batch-project-assembly-0.1.0-SNAPSHOT.jar"
 CLASS = "com.yelpbatch.app.Runner"
-ENV = Variable.get("yelp_env", default_var="local")  # local | dev | prod
+
+# Spark Infrastructure Configuration (where Spark driver runs)
+# This is for Airflow/Spark interaction, not passed to the application
+DEPLOY_MODE = Variable.get("spark_deploy_mode", default_var="client")  # client | cluster
+
+# Application Configuration (which config file Runner loads: local.conf, dev.conf, prod.conf)
+# Default value for when not specified in trigger
+DEFAULT_ENV = "dev"  # local | dev | prod
 
 @dag(
     schedule=None,
@@ -21,8 +28,9 @@ def yelp_batch_pipeline():
         task_id="bronze",
         application=JAR_PATH,
         java_class=CLASS,
+        deploy_mode=DEPLOY_MODE,
         application_args=["--process","bronze_ingest",
-                          "--env",ENV,
+                          "--env","{{ dag_run.conf.get('env', '" + DEFAULT_ENV + "') }}",
                           "--run_date","{{ dag_run.conf.get('run_date', ds) }}",
                           "--tables", "{{ dag_run.conf.get('tables', 'business,review,user,checkin,tip') }}",
                           "--skip_bronze", "{{ dag_run.conf.get('skip_bronze', 'false') }}"],
@@ -32,8 +40,9 @@ def yelp_batch_pipeline():
         task_id="silver",
         application=JAR_PATH,
         java_class=CLASS,
+        deploy_mode=DEPLOY_MODE,
         application_args=["--process","silver_ingest",
-                          "--env",ENV,
+                          "--env","{{ dag_run.conf.get('env', '" + DEFAULT_ENV + "') }}",
                           "--start_date", "{{ dag_run.conf.get('start_date', dag_run.conf.get('run_date', ds)) }}",
                           "--end_date",   "{{ dag_run.conf.get('end_date',   dag_run.conf.get('run_date', ds)) }}",
                           "--tables", "{{ dag_run.conf.get('tables', 'business,review,user,checkin,tip') }}",
@@ -47,10 +56,11 @@ def yelp_batch_pipeline():
         task_id="gold_fact_review_tip",
         application=JAR_PATH,
         java_class=CLASS,
+        deploy_mode=DEPLOY_MODE,
         jars="/opt/airflow/jars/postgresql-42.7.8.jar",  # Add PostgreSQL driver
         driver_class_path="/opt/airflow/jars/postgresql-42.7.8.jar",  # Add to driver classpath
         application_args=["--process","gold_fact_review_tip",
-                          "--env",ENV,
+                          "--env","{{ dag_run.conf.get('env', '" + DEFAULT_ENV + "') }}",
                           "--start_date", "{{ dag_run.conf.get('start_date', dag_run.conf.get('run_date', ds)) }}",
                           "--end_date",   "{{ dag_run.conf.get('end_date',   dag_run.conf.get('run_date', ds)) }}",
                           "--tables", "{{ dag_run.conf.get('tables', 'business,review,user,checkin,tip') }}",
@@ -65,10 +75,11 @@ def yelp_batch_pipeline():
         task_id="gold_business_popularity",
         application=JAR_PATH,
         java_class=CLASS,
+        deploy_mode=DEPLOY_MODE,
         jars= "/opt/airflow/jars/postgresql-42.7.8.jar",  # Add PostgreSQL driver
         driver_class_path="/opt/airflow/jars/postgresql-42.7.8.jar",  # Add to driver classpath
         application_args=["--process","gold_business_popularity",
-                            "--env",ENV,
+                            "--env","{{ dag_run.conf.get('env', '" + DEFAULT_ENV + "') }}",
                             "--start_date", "{{ dag_run.conf.get('start_date', dag_run.conf.get('run_date', ds)) }}",
                             "--end_date",   "{{ dag_run.conf.get('end_date',   dag_run.conf.get('run_date', ds)) }}",
                             "--pg_user", "{{dag_run.conf.get('pg_user', 'airflow')}}",

@@ -13,60 +13,6 @@ object PostgreSQLWriter {
     s"jdbc:postgresql://$host:$port/$database"
   }
 
-  /** Utility to write DataFrame to PostgreSQL via JDBC
-   * @param spark     : SparkSession
-   * @param df        : DataFrame to write
-   * @param jdbcUrl   : JDBC URL for PostgreSQL
-   * @param tableName : target table name
-   * @param user      : database user
-   * @param password  : database password
-   * @param enabled   : flag to enable/disable writing (default: true)
-   * @param mode      : write mode (default: "append")
-   * @param options   : additional JDBC options as key-value map
-   * */
-  def writeToPostgreSQL(
-    spark: SparkSession,
-    df: DataFrame,
-    jdbcUrl: String,
-    tableName: String,
-    user: String,
-    password: String,
-    enabled: Boolean = true,
-    mode: String = "append",
-    options: Map[String, String] = Map.empty
-  ): Unit = {
-
-    // Check if writing is enabled
-    if (!enabled) {
-      logger.info("PostgreSQL writing is disabled. Skipping write operation.")
-      return
-    }
-
-    logger.info(s"[PostgreSQLWriter] Writing to PostgreSQL table: $tableName")
-    logger.info(s"[PostgreSQLWriter] JDBC URL: $jdbcUrl")
-    logger.info(s"[PostgreSQLWriter] Mode: $mode")
-
-    // Convert string date columns to proper DATE type
-    val dfWithProperTypes: DataFrame = df
-      .withColumn("day", to_date(col("day"))) // Convert string to DATE
-      .withColumn("_gold_ingest_ts", col("_gold_ingest_ts").cast("timestamp"))
-
-    // Write DataFrame to PostgreSQL via JDBC
-    var writer = dfWithProperTypes.write
-      .format("jdbc")
-      .option("url", jdbcUrl)
-      .option("dbtable", tableName)
-      .option("user", user)
-      .option("password", password)
-      .mode(mode)
-
-    options.foreach { case (k, v) => writer = writer.option(k, v) }
-
-    writer.save()
-
-    logger.info(s"Data written to PostgreSQL table $tableName at $jdbcUrl")
-  }
-
   /** Upsert DataFrame to PostgreSQL by deleting existing records before inserting
    * This handles duplicate key conflicts by removing existing data for the same keys
    *
@@ -165,9 +111,10 @@ object PostgreSQLWriter {
       .option("dbtable", tableName)
       .option("user", user)
       .option("password", password)
-      .option("driver", "org.postgresql.Driver")
-      .option("batchsize", "1000")
-      .option("isolationLevel", "READ_COMMITTED")
+      .option("driver", "org.postgresql.Driver") // Specify PostgreSQL driver
+      .option("batchsize", "1000") // Set batch size (to optimize performance)
+      .option("isolationLevel", "READ_COMMITTED") // Set isolation level (to avoid locks)
+      .option("createTableColumnTypes", "day DATE, _gold_ingest_ts TIMESTAMP")  // Force DATE type
       .mode("append")
       .save()
 

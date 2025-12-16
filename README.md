@@ -55,30 +55,49 @@ mongodb {
 ```
 
 #### Option 2: MongoDB (Optional)
-Load the JSON files into MongoDB collections:
+Load the JSON files into MongoDB collections for production-grade data ingestion.
 
-1. **Start MongoDB** (via Docker or local installation):
+**Quick Setup:**
+
+1. **Start MongoDB container**:
    ```bash
-   docker run -d -p 27017:27017 --name mongodb mongo:7
+   docker compose up -d mongo
    ```
 
-2. **Import data** using `mongoimport`:
-   ```bash
-   mongoimport --db yelpAcademicDatasets --collection business --file yelp_academic_dataset_business.json
-   mongoimport --db yelpAcademicDatasets --collection checkin --file yelp_academic_dataset_checkin.json
-   mongoimport --db yelpAcademicDatasets --collection review --file yelp_academic_dataset_review.json
-   mongoimport --db yelpAcademicDatasets --collection tip --file yelp_academic_dataset_tip.json
-   mongoimport --db yelpAcademicDatasets --collection user --file yelp_academic_dataset_user.json
+2. **Run automated import script**:
+   ```powershell
+   # If script execution is blocked, use bypass flag
+   powershell -ExecutionPolicy Bypass -File .\scripts\import-mongo-data.ps1
+   
+   # Or if scripts are allowed
+   .\scripts\import-mongo-data.ps1
+   ```
+   This will import all 5 JSON files (~15-20 minutes total).
+
+3. **Enable MongoDB in configuration**:
+   - For **Airflow/Docker** (`src/main/resources/dev.conf`):
+     ```hocon
+     mongodb {
+       enabled = true
+       uri = "mongodb://mongo:27017"        # Docker service name
+       database = "yelpAcademicDatasets"
+     }
+     ```
+   - For **Local Windows** (`src/main/resources/local.conf`):
+     ```hocon
+     mongodb {
+       enabled = true
+       uri = "mongodb://localhost:27017"   # Host machine
+       database = "yelpAcademicDatasets"
+     }
+     ```
+
+4. **Verify data**:
+   ```powershell
+   docker exec -it yelp-batch-project-mongo-1 mongosh --quiet --eval "db.getSiblingDB('yelpAcademicDatasets').business.countDocuments()"
    ```
 
-3. **Enable MongoDB in configuration** (`src/main/resources/application.conf`):
-   ```hocon
-   mongodb {
-     enabled = true
-     uri = "mongodb://localhost:27017"
-     database = "yelpAcademicDatasets"
-   }
-   ```
+**📖 For complete setup guide, troubleshooting, and performance tuning, see**: [`docs/MONGODB_SETUP.md`](docs/MONGODB_SETUP.md)
 
 > **Note**: Due to the large file sizes, these files are not included in the repository. You must download them separately from Kaggle before running the pipeline.
 
@@ -174,9 +193,11 @@ The assembly JAR will be created at `target/scala-2.12/yelp-batch-project-assemb
 
 #### 3. Set Up Configuration Files
 Edit the configuration files in `src/main/resources/` for your environment:
-- `local.conf` - for local development
-- `dev.conf` - for development environment
-- `prod.conf` - for production environment
+- **`local.conf`** - for local Windows development (without Docker)
+- **`dev.conf`** - for Docker/Airflow environment 
+- **`prod.conf`** - for production environment
+
+> **📖 Important**: Understanding which config file to use is crucial! See [Configuration Files Guide](docs/CONFIG_FILES_GUIDE.md) for detailed explanations and common mistakes to avoid.
 
 Key configurations to update:
 - MongoDB connection strings (if using MongoDB as source)
@@ -226,8 +247,55 @@ bin\run-local.cmd --process gold_fact_review_tip --env local --run_date 2020-01-
 
 #### 5. Run with Airflow (Orchestrated)
 
+##### ⚠️ Security Setup (First Time Only)
+
+Before starting Airflow, you need a Fernet key for encrypting credentials.
+
+**Automated Setup (Recommended)** 🚀
+```powershell
+# Run the setup script to generate key and create .env file
+python bin/setup.py
+
+# Follow the prompts - it will:
+# 1. Generate a secure Fernet key
+# 2. Create .env file automatically
+# 3. Show you next steps
+
+# See the script: bin/setup.py
+```
+
+**Manual Setup (Alternative)**
+```powershell
+# 1. Copy the template
+cp .env.example .env
+
+# 2. Generate a Fernet key
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# 3. Edit .env and paste your generated key
+# AIRFLOW_FERNET_KEY=<paste-your-key-here>
+```
+
+**Quick Start (Local Development Only)**
+```powershell
+# Use the pre-filled development key
+cp .env.example .env
+# ⚠️ Not secure for production!
+```
+
+**Verify** (after starting Airflow):
+```powershell
+# Check the Fernet key is loaded
+docker exec yelp-batch-project-airflow-scheduler-1 env | Select-String "FERNET"
+```
+
+**⚠️ Security Note**: 
+- The `.env` file is **gitignored** and never committed
+- For production, always generate a new unique key
+
 ##### Start Airflow with Docker
 ```bash
+
 # Build and start Airflow services
 docker-compose up -d
 
@@ -281,6 +349,27 @@ You need to manually create the Spark connection in Airflow UI for the DAG to wo
 - If you see "Could not load connection string spark_default, defaulting to yarn" in logs, the connection wasn't created properly
 - Make sure the Connection Id is exactly `spark_default` (lowercase, with underscore)
 - Ensure Connection Type is set to `Spark` (not `HTTP` or other types)
+
+##### Configure Airflow Variables
+
+Set Spark infrastructure variable (one-time setup):
+
+1. **Access Airflow UI**: Navigate to `http://localhost:8080`
+2. **Go to Variables**: Click **Admin** → **Variables** in the top menu
+3. **Add Variable**: Click the **+** button and add:
+
+| Key | Value | Description |
+|-----|-------|-------------|
+| `spark_deploy_mode` | `client` | Where Spark driver runs (client=local, cluster=remote) |
+
+> **Note**: The `env` parameter selects which config file to load:
+> - `env: "local"` → uses `local.conf` (for local Windows execution)
+> - `env: "dev"` → uses `dev.conf` (for Docker/Airflow)
+> - `env: "prod"` → uses `prod.conf` (for production)
+> 
+> This is **NOT** an Airflow Variable - it's specified per DAG run via trigger JSON.
+
+**📖 For detailed configuration guide, see**: [`docs/SPARK_DEPLOY_MODE_SETUP.md`](docs/SPARK_DEPLOY_MODE_SETUP.md)
 
 ##### Copy JAR to Airflow
 ```bash
@@ -347,15 +436,26 @@ The schema automatically creates:
 - 10 strategic indexes for performance
 
 2. **Enable PostgreSQL writes** in your configuration:
-```hocon
-# src/main/resources/dev.conf or local.conf
-postgresql {
-  enabled = true
-  host = "host.docker.internal"  # or "postgres" from Airflow
-  port = 5432
-  database = "airflow"
-}
-```
+
+   **For Airflow/Docker** (`src/main/resources/dev.conf`):
+   ```hocon
+   postgresql {
+     enabled = true
+     host = "postgres"              # Docker service name
+     port = 5433
+     database = "yelp_analytics"
+   }
+   ```
+
+   **For Local Windows** (`src/main/resources/local.conf`):
+   ```hocon
+   postgresql {
+     enabled = true
+     host = "localhost"   
+     port = 5432 # Local PostgreSQL instance port
+     database = "yelp_analytics"
+   }
+   ```
 
 3. **Run Gold processes with PostgreSQL credentials**:
 ```powershell
@@ -388,10 +488,10 @@ This makes the pipeline **idempotent** - you can safely re-run the same date mul
 
 ```powershell
 # First run - inserts data
-bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
+bin\run-local.cmd --process gold_business_popularity --env local --run_date 2020-01-31 --pg_user postgres --pg_password postgres
 
 # Second run (same date) - deletes old data, inserts fresh data (no duplicate key error!)
-bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
+bin\run-local.cmd --process gold_business_popularity --env local --run_date 2020-01-31 --pg_user postgres --pg_password postgres
 ```
 
 **Logs will show**:
@@ -405,6 +505,64 @@ bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-0
 ```
 
 📖 **For complete setup guide, queries, and troubleshooting, see [sql/README.md](./sql/README.md)**
+
+### Security Best Practices
+
+#### Environment Variables & Secrets
+
+This project uses environment variables for sensitive configuration:
+
+**Files tracked by git**:
+- ✅ `.env.example` - Template with placeholder values
+- ✅ `airflow.cfg.template` - Configuration template without secrets
+- ✅ `docker-compose.yaml` - References environment variables
+
+**Files NOT tracked by git** (in `.gitignore`):
+- 🔒 `.env` - Your actual environment variables
+- 🔒 `airflow/config/airflow.cfg` - Airflow config with Fernet key
+
+#### Fernet Key Management
+
+**Recommended: Automated Setup** 🚀
+```powershell
+# Generate key and create .env automatically
+python bin/setup.py
+
+# The script will:
+# - Generate a cryptographically secure Fernet key
+# - Create .env file with the key
+# - Verify setup is correct
+```
+
+**Manual Setup** (if preferred):
+```powershell
+# 1. Generate a new Fernet key
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# 2. Copy template and update with your key
+cp .env.example .env
+# Edit .env: AIRFLOW_FERNET_KEY=your-generated-key
+```
+
+**Verification**:
+```powershell
+# After starting Airflow, verify key is loaded
+docker exec yelp-batch-project-airflow-scheduler-1 env | Select-String "FERNET"
+```
+
+**⚠️ Important**:
+- Never commit `.env` or `airflow.cfg` to version control
+- Generate a new key for each environment (dev/staging/prod)
+- If you change the key, re-create all Airflow connections
+
+**What Fernet Key Protects**:
+- Airflow database connection passwords
+- API keys stored in Airflow connections
+- Sensitive variables in Airflow
+
+**⚠️ Security Warning**: If you change the Fernet key after storing connections, you must re-create all encrypted connections in Airflow UI.
+
+---
 
 ### Troubleshooting
 
@@ -444,6 +602,17 @@ bin\run-local.cmd --process bronze_ingest --env local --tables "checkin"
 ```bash
 # Caused by multiple business versions - already handled in readData
 # Check logs for deduplication: "dropDuplicates(Seq(business_id))"
+```
+
+**6. MongoDB connection issues**
+```powershell
+# Verify MongoDB setup
+.\scripts\check-mongo-setup.ps1
+
+# Common fixes:
+# - Check container is running: docker ps --filter "name=mongo"
+# - Verify data is imported: see docs/MONGODB_SETUP.md
+# - Check URI in config matches environment (mongo vs localhost)
 ```
 
 ### Monitoring

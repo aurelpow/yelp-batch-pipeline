@@ -1,0 +1,23 @@
+# ============================================================================
+# Airflow Configuration Template
+# ============================================================================
+# This is a TEMPLATE file with the fernet_key removed for security.
+# The actual airflow.cfg is generated automatically or should be copied from
+# this template and configured with your own fernet_key.
+#
+# To use:
+# 1. Copy this file to airflow/config/airflow.cfg
+# 2. Generate a fernet key: 
+#    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# 3. Replace the fernet_key value in airflow/config/airflow.cfg
+#
+# NOTE: The fernet_key can also be set via environment variable:
+#       AIRFLOW__CORE__FERNET_KEY (recommended for production)
+# ============================================================================
+
+[core]
+# Security warning: Never commit airflow.cfg with the actual fernet_key!
+# Use environment variable AIRFLOW__CORE__FERNET_KEY instead
+fernet_key = YOUR_GENERATED_FERNET_KEY_HERE
+
+# ... other airflow configuration ...

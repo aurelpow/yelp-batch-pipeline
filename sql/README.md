@@ -69,8 +69,8 @@ ORDER BY city_rank
 LIMIT 10;
 ```
 
-#### 2. `fact_review_tip_metrics_wide`
-**Daily/Monthly review and tip metrics in measure-based format**
+#### 2. `fact_review_tip_metrics`
+**Daily/Monthly review and tip metrics in narrow format (stacked metrics)**
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -78,31 +78,34 @@ LIMIT 10;
 | day | DATE | Metric date (PK) |
 | period_month | VARCHAR(7) | YYYY-MM format |
 | granularity | INTEGER | 0=Daily, 2=Monthly (PK) |
-| measure | INTEGER | Metric type 1-8 (PK) |
+| measure | INTEGER | Metric type 1-9 (PK) |
 | units | DOUBLE PRECISION | Metric value |
 | _gold_ingest_ts | TIMESTAMP | Audit timestamp |
 
 **Measure Codes**:
+
 | ID | Measure | Description |
 |----|---------|-------------|
 | 1 | review_count | Total reviews |
-| 2 | avg_review_stars | Average rating (1-5) |
-| 3 | tip_count | Total tips |
-| 4 | avg_review_stars_sum | Sum of ratings |
-| 5 | avg_tip_compliments | Avg compliments/tip |
-| 6 | tip_compliments_sum | Total compliments |
-| 7 | positive_sentiment_pct | % reviews ≥4 stars |
-| 8 | negative_sentiment_pct | % reviews ≤2 stars |
+| 2 | tip_count | Total tips |
+| 3 | compliment_count_sum | Sum of tip compliments |
+| 4 | avg_stars | Average rating (1-5) |
+| 5 | total_useful | Sum of useful votes |
+| 6 | total_funny | Sum of funny votes |
+| 7 | total_cool | Sum of cool votes |
+| 8 | distinct_users_review | Unique review authors |
+| 9 | distinct_users_tip | Unique tip authors |
 
 **Example Query**:
 ```sql
--- Monthly trends for a business (pivot format)
+-- Monthly trends for a business (pivot narrow to wide format)
 SELECT 
     period_month,
     MAX(CASE WHEN measure = 1 THEN units END) AS review_count,
-    MAX(CASE WHEN measure = 2 THEN units END) AS avg_stars,
-    MAX(CASE WHEN measure = 7 THEN units END) AS positive_pct
-FROM gold.fact_review_tip_metrics_wide
+    MAX(CASE WHEN measure = 4 THEN units END) AS avg_stars,
+    MAX(CASE WHEN measure = 2 THEN units END) AS tip_count,
+    MAX(CASE WHEN measure = 5 THEN units END) AS total_useful
+FROM gold.fact_review_tip_metrics
 WHERE business_id = 'YOUR_ID' AND granularity = 2
 GROUP BY period_month
 ORDER BY period_month;
@@ -144,14 +147,81 @@ docker cp sql/init-schema.sql yelp-batch-project-postgres-1:/tmp/
 docker exec -it yelp-batch-project-postgres-1 psql -U airflow -d airflow -f /tmp/init-schema.sql
 ```
 
-### Enable PostgreSQL in Pipeline
+### Option 3: Local PostgreSQL Setup (Non-Docker)
 
-Update your config file (`src/main/resources/dev.conf` or `local.conf`):
+If you're using a **local Windows PostgreSQL** instance (not Docker), manually create the schema:
+
+#### Step 1: Create Database and Schema
+
+```sql
+-- Connect to your PostgreSQL (adjust credentials as needed)
+-- psql -h localhost -p 5432 -U postgres
+
+-- Create database if needed
+CREATE DATABASE yelp_analytics;
+
+-- Connect to it
+\c yelp_analytics
+
+-- Create gold schema
+CREATE SCHEMA IF NOT EXISTS gold;
+```
+
+#### Step 2: Create Tables
+*(Copy-Paste from init-schema.sql)*
+#### Step 3: Create Indexes for Performance
+*(Copy-Paste from init-schema.sql)*
+#### Step 4: Create Analytical Views (Optional)
+*(Copy-Paste from init-schema.sql)*
+#### Step 5: Verify Setup
+
+```sql
+-- List all tables
+\dt gold.*
+
+-- Check table structures
+\d+ gold.business_popularity
+\d+ gold.fact_review_tip_metrics
+
+-- Verify measure codes
+SELECT * FROM gold.measure_codes ORDER BY measure_id;
+```
+
+#### Step 6: Update Configuration
+
+Update `src/main/resources/local.conf`:
 
 ```hocon
 postgresql {
   enabled = true
-  host = "host.docker.internal"  # or "postgres" from Airflow
+  host = "localhost"              # Local PostgreSQL
+  port = 5432                     # Default PostgreSQL port
+  database = "yelp_analytics"     # Your database name
+  user = "postgres"               # Your username
+  password = "your_password"      # Your password
+}
+```
+
+#### Step 7: Test the Pipeline
+
+```powershell
+# Run gold processing with PostgreSQL enabled
+bin\run-local.cmd --process gold_business_popularity --env local --run_date 2020-01-31 --pg_user postgres --pg_password your_password
+
+# Verify data
+psql -h localhost -p 5432 -U postgres -d yelp_analytics -c "SELECT COUNT(*) FROM gold.business_popularity;"
+```
+
+---
+
+### Enable PostgreSQL in Pipeline (Docker)
+
+Update your config file (`src/main/resources/dev.conf`):
+
+```hocon
+postgresql {
+  enabled = true
+  host = "postgres"               # Docker service name
   port = 5432
   database = "airflow"
 }
@@ -159,14 +229,17 @@ postgresql {
 
 Run with credentials:
 ```powershell
-bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
+# Trigger via Airflow UI with:
+# {"env": "dev", "run_date": "2020-01-31", "pg_user": "airflow", "pg_password": "airflow"}
 ```
 
 ---
 
 ## Connection Details
 
-### From Docker Containers (Airflow/Spark)
+### Option A: Docker PostgreSQL (via docker-compose)
+
+**From Docker Containers (Airflow/Spark)**:
 ```
 Host: postgres
 Port: 5432
@@ -176,17 +249,31 @@ Password: airflow
 Schema: gold
 ```
 
-### From Host Machine (pgAdmin, psql, BI tools)
+**From Host Machine (pgAdmin, psql, BI tools)**:
 ```
 Host: localhost
-Port: 5433
+Port: 5433                    # Mapped from Docker
 Database: airflow
 User: airflow
 Password: airflow
 Schema: gold
 ```
 
+### Option B: Local PostgreSQL (Windows installation)
+
+**Direct Connection**:
+```
+Host: localhost
+Port: 5432                    # Default PostgreSQL port
+Database: yelp_analytics      # Or your database name
+User: postgres                # Or your username
+Password: your_password       # Your actual password
+Schema: gold
+```
+
 ### JDBC URL (Spark)
+
+**Docker PostgreSQL**:
 ```scala
 // From Airflow containers
 jdbc:postgresql://postgres:5432/airflow?currentSchema=gold
@@ -196,21 +283,45 @@ jdbc:postgresql://host.docker.internal:5432/airflow?currentSchema=gold
 jdbc:postgresql://localhost:5433/airflow?currentSchema=gold
 ```
 
+**Local PostgreSQL**:
+```scala
+// From Windows
+jdbc:postgresql://localhost:5432/yelp_analytics?currentSchema=gold
+```
+
 ### Connection Examples
 
 **psql (Command Line)**:
+
+Docker PostgreSQL:
 ```powershell
 # From host
 psql -h localhost -p 5433 -U airflow -d airflow
 
-# From Docker
+# From Docker container
 docker exec -it yelp-batch-project-postgres-1 psql -U airflow -d airflow
 ```
 
+Local PostgreSQL:
+```powershell
+# From Windows
+psql -h localhost -p 5432 -U postgres -d yelp_analytics
+
+# Quick query
+psql -h localhost -p 5432 -U postgres -d yelp_analytics -c "SELECT COUNT(*) FROM gold.business_popularity;"
+```
+
 **pgAdmin 4**:
+
+Docker PostgreSQL:
 - Create new server
-- General → Name: Yelp Analytics
-- Connection → Host: localhost, Port: 5433, Database: airflow, Username: airflow
+- General → Name: Yelp Analytics (Docker)
+- Connection → Host: `localhost`, Port: `5433`, Database: `airflow`, Username: `airflow`
+
+Local PostgreSQL:
+- Create new server
+- General → Name: Yelp Analytics (Local)
+- Connection → Host: `localhost`, Port: `5432`, Database: `yelp_analytics`, Username: `postgres`
 
 ---
 
@@ -234,8 +345,8 @@ SELECT
     'business_popularity' as table_name, COUNT(*) as rows 
 FROM gold.business_popularity
 UNION ALL
-SELECT 'fact_review_tip_metrics_wide', COUNT(*) 
-FROM gold.fact_review_tip_metrics_wide;
+SELECT 'fact_review_tip_metrics', COUNT(*)
+FROM gold.fact_review_tip_metrics;
 ```
 
 **Latest data**:
@@ -267,9 +378,9 @@ SELECT
     bp.city,
     COUNT(DISTINCT bp.business_id) as businesses,
     AVG(bp.popularity_score) as avg_popularity,
-    AVG(CASE WHEN f.measure = 2 THEN f.units END) as avg_rating
+    AVG(CASE WHEN f.measure = 4 THEN f.units END) as avg_rating
 FROM gold.business_popularity bp
-JOIN gold.fact_review_tip_metrics_wide f 
+JOIN gold.fact_review_tip_metrics f
     ON bp.business_id = f.business_id AND bp.day = f.day
 WHERE bp.period_month = (SELECT month FROM latest)
   AND f.granularity = 2
@@ -297,7 +408,7 @@ SELECT
     MAX(CASE WHEN measure = 1 THEN units END) as reviews,
     LAG(MAX(CASE WHEN measure = 1 THEN units END)) 
         OVER (ORDER BY period_month) as prev_month
-FROM gold.fact_review_tip_metrics_wide
+FROM gold.fact_review_tip_metrics
 WHERE business_id = 'YOUR_ID' AND granularity = 2 AND measure = 1
 GROUP BY period_month
 ORDER BY period_month;
@@ -424,38 +535,6 @@ docker ps | Select-String postgres
 
 ---
 
-### Data Issues
-
-**Problem**: No data in tables
-
-**Check**: Run gold processes with PostgreSQL enabled
-```powershell
-bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
-```
-
----
-
-**Problem**: Re-running the same date causes duplicate key errors
-
-**Solution**: The pipeline automatically handles this with an **upsert strategy** (delete-before-insert)
-
-When you re-run the same date:
-1. **Deletes** existing records for that day/period
-2. **Inserts** fresh data
-
-**Example**:
-```powershell
-# First run - inserts data ✅
-bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
-
-# Second run (same date) - deletes old + inserts new ✅ (no error!)
-bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
-```
-
-**Delete keys used**:
-- `business_popularity`: Deletes by `day`, `period_month`
-- `fact_review_tip_metrics_wide`: Deletes by `day`, `period_month`, `granularity`
-
 **Verify no duplicates**:
 ```sql
 -- Should return 0 rows
@@ -485,7 +564,7 @@ docker compose down
 **Slow queries**: Update statistics
 ```sql
 ANALYZE gold.business_popularity;
-ANALYZE gold.fact_review_tip_metrics_wide;
+ANALYZE gold.fact_review_tip_metrics;
 ```
 
 **Check indexes**:
@@ -513,7 +592,7 @@ WHERE city = 'Philadelphia' AND period_month = '2020-01';
 **Vacuum and analyze** (weekly):
 ```sql
 VACUUM ANALYZE gold.business_popularity;
-VACUUM ANALYZE gold.fact_review_tip_metrics_wide;
+VACUUM ANALYZE gold.fact_review_tip_metrics;
 ```
 
 **Check table sizes**:
