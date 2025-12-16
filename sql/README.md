@@ -535,38 +535,6 @@ docker ps | Select-String postgres
 
 ---
 
-### Data Issues
-
-**Problem**: No data in tables
-
-**Check**: Run gold processes with PostgreSQL enabled
-```powershell
-bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
-```
-
----
-
-**Problem**: Re-running the same date causes duplicate key errors
-
-**Solution**: The pipeline automatically handles this with an **upsert strategy** (delete-before-insert)
-
-When you re-run the same date:
-1. **Deletes** existing records for that day/period
-2. **Inserts** fresh data
-
-**Example**:
-```powershell
-# First run - inserts data ✅
-bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
-
-# Second run (same date) - deletes old + inserts new ✅ (no error!)
-bin\run-local.cmd --process gold_business_popularity --env dev --run_date 2020-01-31 --pg_user airflow --pg_password airflow
-```
-
-**Delete keys used**:
-- `business_popularity`: Deletes by `day`, `period_month`
-- `fact_review_tip_metrics`: Deletes by `day`, `period_month`, `granularity`
-
 **Verify no duplicates**:
 ```sql
 -- Should return 0 rows

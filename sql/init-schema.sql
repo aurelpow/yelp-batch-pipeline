@@ -126,7 +126,7 @@ COMMENT ON COLUMN gold.business_popularity.granularity IS
 -- Granularity: One row per business, date, granularity, and measure combination
 -- Key Metrics: Review count, stars, tip count, compliments, user engagement
 -- Use Case: Business performance tracking, trend analysis, KPI monitoring
--- Format: Narrow/long format - stacked metrics with measure identifier
+-- Format: Narrow format - stacked metrics with measure identifier
 -- =============================================================================
 
 -- Note: Using IF NOT EXISTS makes this script idempotent and safe to re-run
