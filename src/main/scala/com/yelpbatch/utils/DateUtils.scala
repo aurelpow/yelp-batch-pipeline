@@ -1,20 +1,32 @@
 package com.yelpbatch.utils
 
 import java.time.{LocalDate, YearMonth}
+import java.time.format.DateTimeFormatter
+import scala.util.{Try, Success, Failure}
 
 object DateUtils {
 
   /**
    * Parse and return a normalized ISO date string for the supplied input.
    *
-   * The method parses `d` using `LocalDate.parse` and returns the canonical
-   * `YYYY-MM-DD` representation (same as `LocalDate.toString`).
+   * The method uses the provided `DatePattern` to parse the input string `d` and
+   * returns a canonical ISO date string (`YYYY-MM-DD`). If the input string does not conform to the
+   * expected pattern, an `IllegalArgumentException` is thrown with a descriptive
+   * error message including the field name.
    *
    * @param d date string in ISO format (`YYYY-MM-DD`)
-   * @return normalized date string `YYYY-MM-DD`
+   * @param DatePattern the expected date pattern of the input string (default: yyyy-MM-dd)
+   * @param field the name of the field being parsed (for error messages) (default: date)
+   * @return normalized ISO date string
    * @throws java.time.format.DateTimeParseException if `d` is not a valid ISO date
    */
-  def normalizeDate(d: String): String = LocalDate.parse(d).toString
+  def normalizeDate(d: String, DatePattern: String = "yyyy-MM-dd", field: String = "date"): String = {
+    val formatter: DateTimeFormatter = DateTimeFormatter.ofPattern(DatePattern)
+    Try(LocalDate.parse(d, formatter)) match {
+      case Success(date) => date.toString
+      case Failure(_) => throw new IllegalArgumentException(s"Invalid date format for $field: $d. Expected format: $DatePattern")
+    }
+  }
 
   /**
    * Determine whether the supplied date is the last day of its month.
