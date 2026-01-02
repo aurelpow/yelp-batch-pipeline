@@ -33,6 +33,7 @@ lazy val root = (project in file("."))
       case "reference.conf" => MergeStrategy.concat
       case "application.conf" => MergeStrategy.concat
       case "log4j.properties" => MergeStrategy.first
+      case "log4j2.properties" => MergeStrategy.first
       case x if x.endsWith(".proto") => MergeStrategy.first
       case _ => MergeStrategy.first
     },
