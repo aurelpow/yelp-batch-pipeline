@@ -17,7 +17,7 @@ object Observability {
     logger.info(s"""{"metric":"$name", "value":$value, "tags":{$tagString}}""")
   }
 
-  // Circuit Breaker State
+    // Circuit Breaker State
   private val failureCount = new java.util.concurrent.atomic.AtomicInteger(0)
   private val lastFailureTime = new java.util.concurrent.atomic.AtomicLong(0)
   private val failureThreshold = 5
@@ -33,7 +33,7 @@ object Observability {
     val now = System.currentTimeMillis()
 
     if (failures >= failureThreshold) {
-      if (now - lastFail > resetTimeout) {
+      if (now - lastFail > resetTimeout && lastFailureTime.compareAndSet(lastFail, now)) {
         // Half-open: try once
         try {
           logger.info("Circuit Breaker: Half-open, attempting operation...")
@@ -44,7 +44,7 @@ object Observability {
           result
         } catch {
           case e: Exception =>
-            lastFailureTime.set(now)
+            lastFailureTime.set(System.currentTimeMillis())
             logger.warn("Circuit Breaker: Open (Probe failed)")
             throw new RuntimeException("Circuit Breaker: Open (Probe failed)", e)
         }
@@ -70,6 +70,11 @@ object Observability {
   /**
    * Retry Logic (Resilience)
    * Retries a block of code 'maxRetries' times with exponential backoff.
+   * @param fn The block of code to execute
+   * @param maxRetries Maximum number of retries
+   * @param delayMs Initial delay in milliseconds
+   * @tparam T Return type of the block
+   * @return Result of type T
    */
   @scala.annotation.tailrec
   def withRetry[T](fn: => T, maxRetries: Int = 3, delayMs: Long = 2000, attempt: Int = 1): T = {
@@ -77,7 +82,13 @@ object Observability {
       case Success(result) => result
       case Failure(e) if attempt <= maxRetries =>
         logger.warn(s"Operation failed (Attempt $attempt/$maxRetries). Retrying in ${delayMs}ms. Error: ${e.getMessage}")
-        Thread.sleep(delayMs)
+        try {
+          Thread.sleep(delayMs)
+        } catch {
+          case ie: InterruptedException =>
+            Thread.currentThread().interrupt()
+            throw ie
+        }
         withRetry(fn, maxRetries, delayMs * 2, attempt + 1)
       case Failure(e) =>
         throw e

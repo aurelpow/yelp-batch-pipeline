@@ -19,7 +19,7 @@ case class JobArguments (
                           skipBronze: Boolean
   )
 object JobArguments {
-  private val DatePattern: String = "yyyy-MM-dd"
+  private val datePattern: String = "yyyy-MM-dd"
   private val MaxRangeDays: Int = 31 // Safety cap to prevent accidental large ranges
 
   def parse(args: Array[String]): JobArguments = {
@@ -97,13 +97,13 @@ object JobArguments {
       // Case when only run_date is provided (single date)
       case (Some(date), None, None) =>
         // Validate date format
-        val d = DateUtils.normalizeDate(d = date, DatePattern = DatePattern, field = "--run_date")
+        val d = DateUtils.normalizeDate(d = date, datePattern = datePattern, field = "--run_date")
         Seq(d)
       // Date Range
       case (None, Some(start), Some(end)) =>
         // Validate date formats
-        val sStr = DateUtils.normalizeDate(d = start, DatePattern = DatePattern, field = "--start_date")
-        val eStr = DateUtils.normalizeDate(d = end, DatePattern = DatePattern, field = "--end_date")
+        val sStr = DateUtils.normalizeDate(d = start, datePattern = datePattern, field = "--start_date")
+        val eStr = DateUtils.normalizeDate(d = end, datePattern = datePattern, field = "--end_date")
 
         val startDate = LocalDate.parse(sStr)
         val endDate = LocalDate.parse(eStr)
@@ -113,8 +113,8 @@ object JobArguments {
           throw new IllegalArgumentException(s"end_date $end is before start_date $start")
         }
         // Validate Range Size
-        val daysBetween = ChronoUnit.DAYS.between(startDate, endDate).toInt
-        if (daysBetween > MaxRangeDays) {
+        val inclusiveDays = ChronoUnit.DAYS.between(startDate, endDate).toInt + 1 // inclusive
+        if (inclusiveDays > MaxRangeDays) {
           throw new IllegalArgumentException(s"Date range exceeds maximum allowed of $MaxRangeDays days.")
         }
         // Generate date sequence
