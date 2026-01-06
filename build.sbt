@@ -1,5 +1,5 @@
 ThisBuild / organization := "com.yelpbatch"
-ThisBuild / version := "0.1.0-SNAPSHOT"
+ThisBuild / version := "1.1.0"
 ThisBuild / scalaVersion := "2.12.20"
 
 val sparkV = "3.5.1"

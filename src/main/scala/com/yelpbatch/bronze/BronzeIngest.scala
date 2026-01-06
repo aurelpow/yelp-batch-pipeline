@@ -35,8 +35,17 @@ object BronzeIngest {
 
     // Extract config values
     val mongoEnabled: Boolean = cfg.getBoolean("mongodb.enabled")
-    val mongoUri: String = if (mongoEnabled) cfg.getString("mongodb.uri") else ""
-    val mongoDatabase: String = if (mongoEnabled) cfg.getString("mongodb.database") else ""
+
+    val mongoUri: String = if (mongoEnabled) {
+      if (cfg.hasPath("mongodb.uri")) cfg.getString("mongodb.uri")
+      else throw new IllegalArgumentException("MongoDB is enabled but 'mongodb.uri' is not set in config")
+    } else ""
+
+    val mongoDatabase: String = if (mongoEnabled) {
+      if (cfg.hasPath("mongodb.database")) cfg.getString("mongodb.database")
+      else throw new IllegalArgumentException("Configuration 'mongodb.database' is required when 'mongodb.enabled' is true.")
+    } else ""
+
     val srcDir: String = cfg.getString("paths.rawDir")
     val bronzeDir: String = cfg.getString("paths.bronzeDir")
     val writeMode: String = "overwrite"

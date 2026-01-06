@@ -108,26 +108,9 @@ object AppConfig {
   import pureconfig.generic.ProductHint
   import pureconfig.ConfigFieldMapping
   import pureconfig.CamelCase
-  import pureconfig.KebabCase
 
-  // Configure PureConfig to use CamelCase matching (e.g. legacyTimeParserPolicy matches legacyTimeParserPolicy)
-  // But also handle kebab-case for keys like "delta-stats" if they were kebab-case, but here they are dot-separated in HOCON which maps to nested objects usually.
-  // However, "delta.stats" in HOCON is a nested object "stats" inside "delta".
-  // My Case Class has `deltaStats`.
-  // I need to map `deltaStats` to `delta.stats`.
-  // PureConfig default is KebabCase (delta-stats).
-  // Let's use a custom mapping or adjust the case class.
-  // Easier to adjust case class to match structure or use FieldCoproductHint? No.
 
-  // Actually, "delta.stats" in HOCON means:
-  // delta {
-  //   stats { ... }
-  // }
-  // So I should have a DeltaConfig case class with a stats field.
-  // OR I can use @ConfigFieldMapping to map "deltaStats" to "delta.stats" (which is not a standard field name, it's a path).
-
-  // Let's simplify: I will change the case class structure to match HOCON nesting for delta.stats.
-
+  // Custom hint to map camelCase config fields to snake_case case class fields
   implicit def hint[T]: ProductHint[T] = ProductHint[T](ConfigFieldMapping(CamelCase, CamelCase))
 
   /**

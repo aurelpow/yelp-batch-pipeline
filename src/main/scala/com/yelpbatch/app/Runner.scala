@@ -38,10 +38,10 @@ object Runner {
       }
 
       // 4. Config Loading (Validates config automatically)
-      val (rawConfig, typedConfig) = AppConfig.loadTyped(jobArgs.env)
+      val (rawConfig, _) = AppConfig.loadTyped(jobArgs.env)
 
       // 5. Spark Session Creation
-      spark = createSparkSession(jobArgs, typedConfig)
+      spark = createSparkSession(jobArgs, rawConfig)
 
       // 6. Job Execution
       val startTime = System.currentTimeMillis()
@@ -69,7 +69,7 @@ object Runner {
     }
   }
 
-  private def createSparkSession(jobArgs: JobArguments, appConfig: AppConfig): SparkSession = {
+  private def createSparkSession(jobArgs: JobArguments, config: Config): SparkSession = {
     val sparkBuilder = SparkSession.builder()
       .appName(s"YelpBatch-${jobArgs.process}")
       .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
@@ -78,9 +78,9 @@ object Runner {
       .config("spark.hadoop.fs.file.impl", "org.apache.hadoop.fs.LocalFileSystem")
       .config("spark.hadoop.fs.AbstractFileSystem.file.impl", "org.apache.hadoop.fs.local.LocalFs")
 
-    // Read tuning values from typed config
-    val timeParserPolicy = appConfig.tuning.legacyTimeParserPolicy
-    val executorHeartbeat = appConfig.tuning.executorHeartbeat
+    // Read tuning values from raw config
+    val timeParserPolicy = config.getString("tuning.legacyTimeParserPolicy")
+    val executorHeartbeat = config.getString("tuning.executorHeartbeat")
 
     val configuredBuilder = sparkBuilder
       .config("spark.sql.legacy.timeParserPolicy", timeParserPolicy)

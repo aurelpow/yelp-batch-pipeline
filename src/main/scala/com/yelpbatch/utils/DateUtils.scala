@@ -15,16 +15,16 @@ object DateUtils {
    * error message including the field name.
    *
    * @param d date string in ISO format (`YYYY-MM-DD`)
-   * @param DatePattern the expected date pattern of the input string (default: yyyy-MM-dd)
+   * @param datePattern the expected date pattern of the input string (default: yyyy-MM-dd)
    * @param field the name of the field being parsed (for error messages) (default: date)
    * @return normalized ISO date string
    * @throws java.time.format.DateTimeParseException if `d` is not a valid ISO date
    */
-  def normalizeDate(d: String, DatePattern: String = "yyyy-MM-dd", field: String = "date"): String = {
-    val formatter: DateTimeFormatter = DateTimeFormatter.ofPattern(DatePattern)
+  def normalizeDate(d: String, datePattern: String = "yyyy-MM-dd", field: String = "date"): String = {
+    val formatter: DateTimeFormatter = DateTimeFormatter.ofPattern(datePattern)
     Try(LocalDate.parse(d, formatter)) match {
       case Success(date) => date.toString
-      case Failure(_) => throw new IllegalArgumentException(s"Invalid date format for $field: $d. Expected format: $DatePattern")
+      case Failure(_) => throw new IllegalArgumentException(s"Invalid date format for $field: $d. Expected format: $datePattern")
     }
   }
 
