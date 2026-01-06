@@ -442,7 +442,7 @@ The schema automatically creates:
    postgresql {
      enabled = true
      host = "postgres"              # Docker service name
-     port = 5433
+     port = 5432
      database = "yelp_analytics"
    }
    ```

@@ -158,10 +158,14 @@ object IOUtils {
       require(collection != null && collection.trim.nonEmpty, "Collection name cannot be empty")
       require(spark != null, "SparkSession cannot be null")
 
+      logger.info(s"Configuring MongoDB Reader: URI=$mongoUri, DB=$database, Coll=$collection")
+
       // Build reader
       var reader = spark.read
         .format("mongodb")
-        .option("spark.mongodb.read.connection.uri", s"$mongoUri/$database.$collection")
+        .option("spark.mongodb.read.connection.uri", mongoUri)
+        .option("spark.mongodb.read.database", database)
+        .option("spark.mongodb.read.collection", collection)
 
       // Apply options and schema
       readOptions.foreach { case (k, v) => reader = reader.option(k, v) }

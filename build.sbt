@@ -16,7 +16,8 @@ lazy val root = (project in file("."))
       "org.scalatest" %% "scalatest" % "3.2.18" % Test,
       "org.mongodb.spark" %% "mongo-spark-connector" % "10.4.0",
       "org.mongodb" % "mongodb-driver-sync" % "5.2.1",
-      "org.postgresql" % "postgresql" % "42.7.8"
+      "org.postgresql" % "postgresql" % "42.7.8",
+      "com.github.pureconfig" %% "pureconfig" % "0.17.6"
     ),
 
     // Assembly settings
@@ -32,6 +33,7 @@ lazy val root = (project in file("."))
       case "reference.conf" => MergeStrategy.concat
       case "application.conf" => MergeStrategy.concat
       case "log4j.properties" => MergeStrategy.first
+      case "log4j2.properties" => MergeStrategy.first
       case x if x.endsWith(".proto") => MergeStrategy.first
       case _ => MergeStrategy.first
     },
